@@ -157,6 +157,7 @@ function OverviewLoaded({
     setLastUpdated(new Date());
   }
 
+  const todayCost = todayTimeseries.data?.total_cost ?? null;
   const rangeCost = rangeTimeseries.data?.total_cost ?? null;
 
   return (
@@ -178,7 +179,9 @@ function OverviewLoaded({
         <StatCard
           data-testid="stat-cost-today"
           label="Cost today"
-          value={todayTimeseries.data ? formatCost(todayTimeseries.data.total_cost) : "…"}
+          value={todayTimeseries.data ? formatCost(todayCost) : "…"}
+          faint={isUnknownCost(todayCost)}
+          infoDot={isUnknownCost(todayCost) && todayTimeseries.data ? <InfoDot /> : undefined}
         />
         <StatCard
           data-testid="stat-tokens-today"
@@ -278,6 +281,7 @@ function OverviewLoaded({
                   label: r.key,
                   value: r.tokens,
                   display: formatCost(r.cost),
+                  unknown: isUnknownCost(r.cost),
                 }))}
                 emptyText="No model usage yet."
               />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { InfoDot } from "./InfoDot";
 
 export interface HbarRow {
   label: string;
@@ -44,7 +45,10 @@ export function HbarList({ rows, emptyText = "No data yet.", maxRows = DEFAULT_M
           <div className="hbar-track">
             <div className="hbar-fill" style={{ width: `${(row.value / max) * 100}%` }} />
           </div>
-          <div className="hbar-value">{row.display}</div>
+          <div className="hbar-value">
+            {row.display}
+            {row.unknown && <InfoDot />}
+          </div>
         </div>
       ))}
       {hiddenCount > 0 && (

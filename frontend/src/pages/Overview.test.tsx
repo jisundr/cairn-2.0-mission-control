@@ -41,8 +41,8 @@ function baseHandlers(overrides: Record<string, ReturnType<typeof envelope> | { 
   };
 }
 
-function todaySeries() {
-  return { range: "today", bucket: "hour", since: "", until: "", points: [], total_tokens: 184000, total_cost: 12.4 };
+function todaySeries(total_cost: number | null = 12.4) {
+  return { range: "today", bucket: "hour", since: "", until: "", points: [], total_tokens: 184000, total_cost };
 }
 
 function rangeSeries(total_cost: number | null = 41.1) {
@@ -89,6 +89,24 @@ describe("Overview", () => {
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("stat-cost-range")).toHaveTextContent("unknown*"));
+    expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
+  });
+
+  it("shows an unpriced-model cost as unknown* with an info-dot on the Cost today stat", async () => {
+    installFetchMock(baseHandlers({ "/api/rollup/timeseries:today": envelope(todaySeries(null)) }));
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("stat-cost-today")).toHaveTextContent("unknown*"));
+    expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
+  });
+
+  it("shows an info-dot on a By-model row whose cost is unresolved", async () => {
+    installFetchMock(
+      baseHandlers({ "/api/rollup/model": envelope([{ key: "sonnet-5", calls: 12, tokens: 184204, cost: null }]) }),
+    );
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("model-rollup")).toHaveTextContent("unknown*"));
     expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
   });
 
