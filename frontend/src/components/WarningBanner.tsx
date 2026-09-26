@@ -25,7 +25,7 @@ export function WarningBanner({ events, onViewSession }: WarningBannerProps) {
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 12,
+        gap: 8,
         marginBottom: 18,
         padding: "10px 16px",
         borderRadius: 8,
@@ -35,7 +35,10 @@ export function WarningBanner({ events, onViewSession }: WarningBannerProps) {
         fontSize: 13,
       }}
     >
-      <AlertTriangleIcon />
+      {/* size matches .err-text svg's 14px - PanelError's icon+text
+          treatment for this same icon - since this banner has no
+          wrapping class to constrain it the way PanelError's does. */}
+      <AlertTriangleIcon size={14} />
       <span>
         Usage limit hit {plural} — session <span className="mono">{mostRecent.session_id}</span>
       </span>
