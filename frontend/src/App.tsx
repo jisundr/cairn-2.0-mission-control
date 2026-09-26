@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { AppHeader, type AppTab } from "./components/AppHeader";
+import type { AppTab } from "./components/AppHeader";
+import { Overview } from "./pages/Overview";
 
 type View = { kind: "tab"; tab: AppTab } | { kind: "session"; sessionId: string };
 
@@ -16,14 +17,16 @@ function parseView(pathname: string): View {
 
 // Path-based nav, no router library - ported from token-metering/frontend's
 // Dashboard.tsx approach, so a hard reload of /sessions or /sessions/<id>
-// lands back on the same view instead of resetting to Overview.
+// lands back on the same view instead of resetting to Overview. Each page
+// owns its own `.shell` + header (their header props differ too much
+// across states - e.g. Overview/Disconnected drops the nav entirely - to
+// hoist into one shared wrapper here).
 export function App() {
   const initialView = parseView(window.location.pathname);
   const [activeTab, setActiveTabState] = useState<AppTab>(initialView.kind === "tab" ? initialView.tab : "sessions");
   const [viewSessionId, setViewSessionId] = useState<string | null>(
     initialView.kind === "session" ? initialView.sessionId : null,
   );
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   function navigateToTab(tab: AppTab) {
     setActiveTabState(tab);
@@ -59,30 +62,17 @@ export function App() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  function handleRefresh() {
-    setLastUpdated(new Date());
+  if (viewSessionId) {
+    return <div className="shell">Session {viewSessionId}</div>;
+  }
+
+  if (activeTab === "overview") {
+    return <Overview activeTab={activeTab} onTabChange={navigateToTab} onSelectSession={navigateToSession} />;
   }
 
   return (
-    <div className="shell">
-      {!viewSessionId && (
-        <AppHeader
-          activeTab={activeTab}
-          onTabChange={navigateToTab}
-          hostTag={window.location.hostname || "localhost"}
-          connected
-          onRefresh={handleRefresh}
-          updatedLabel={lastUpdated ? `updated ${lastUpdated.toLocaleTimeString()}` : null}
-        />
-      )}
-
-      {viewSessionId ? (
-        <div>Session {viewSessionId}</div>
-      ) : activeTab === "overview" ? (
-        <div>Overview coming up</div>
-      ) : (
-        <div onClick={() => navigateToSession("placeholder")}>Sessions coming up</div>
-      )}
+    <div className="shell" onClick={() => navigateToSession("placeholder")}>
+      Sessions coming up
     </div>
   );
 }
