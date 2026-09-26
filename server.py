@@ -146,10 +146,8 @@ def write_known_projects(path: Path, roots: list[Path]) -> None:
     parent directory, then `os.replace()` into `path`. `os.replace()` is a
     single filesystem rename, so a concurrent `discover_projects()` read
     always observes either the prior complete file or the new complete
-    file - never a torn, partially-written read. No production caller yet
-    (the existing `hooks/stop-tokens.sh` write path is out of this phase's
-    scope and keeps serving unchanged); this is the hardened primitive a
-    later cutover repoints to.
+    file - never a torn, partially-written read. First called in production
+    by `hooks/stop-mc.sh`, wired in by this feature's cutover phase.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
