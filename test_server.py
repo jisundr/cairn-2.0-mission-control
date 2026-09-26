@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import backfill  # noqa: E402
 import db  # noqa: E402
 import server  # noqa: E402
 
@@ -853,7 +854,7 @@ def test_call_detail_falls_back_to_subagent_transcript(tmp_path):
 
 def test_http_smoke_rollup_timeseries_endpoint(tmp_path):
     root = make_project(tmp_path, "proj", calls=[make_call()])
-    port = server.start(root)
+    port = server.start(root, backfill_enabled=False)
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/rollup/timeseries?range=life") as resp:
             assert resp.status == 200
@@ -869,13 +870,58 @@ def test_http_smoke_catch_all_serves_placeholder_when_static_missing(tmp_path):
     # static_dir already doesn't exist - server.start() exercises exactly the
     # placeholder-serving path this test is about, with no extra plumbing.
     root = make_project(tmp_path, "proj")
-    port = server.start(root)
+    port = server.start(root, backfill_enabled=False)
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/call/sess-1/1") as resp:
             assert resp.status == 200
             assert "text/html" in resp.headers.get("Content-Type", "")
     finally:
         server.stop()
+
+
+# --------------------------------------------------------------------------
+# Backfill kickoff: start() spawns backfill.run() off its own thread and
+# never waits on it before returning the bound port.
+# --------------------------------------------------------------------------
+
+
+def test_start_returns_without_blocking_on_backfill(tmp_path, monkeypatch):
+    root = make_project(tmp_path, "proj")
+    release = threading.Event()
+    finished = threading.Event()
+
+    def blocking_run(known_projects, local_project, claude_projects_dir=None):
+        release.wait(timeout=5)
+        finished.set()
+
+    monkeypatch.setattr(backfill, "run", blocking_run)
+
+    port = server.start(root)
+    try:
+        assert port > 0
+        # start() has already returned above. If it had waited on
+        # backfill.run() to complete before returning, `finished` would be
+        # set by now - blocking_run only sets it after `release` is set,
+        # which hasn't happened yet.
+        assert not finished.is_set()
+    finally:
+        release.set()
+        finished.wait(timeout=2)
+        server.stop()
+
+
+def test_start_backfill_enabled_false_skips_backfill(tmp_path, monkeypatch):
+    root = make_project(tmp_path, "proj")
+    calls = []
+    monkeypatch.setattr(backfill, "run", lambda **kwargs: calls.append(kwargs))
+
+    port = server.start(root, backfill_enabled=False)
+    try:
+        assert port > 0
+    finally:
+        server.stop()
+
+    assert calls == []
 
 
 # --------------------------------------------------------------------------

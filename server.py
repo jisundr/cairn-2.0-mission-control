@@ -1043,11 +1043,26 @@ _server_lock = threading.Lock()
 _server_state: dict = {}
 
 
-def start(cairn_dir: Path, host: str = DEFAULT_HOST, port: int = 0) -> int:
+def start(
+    cairn_dir: Path,
+    host: str = DEFAULT_HOST,
+    port: int = 0,
+    *,
+    backfill_enabled: bool = True,
+) -> int:
     """Start serving `cairn_dir` (used here as the project root - see
     `interfaces.ServerInterface`, whose param name predates this module) in
     a background daemon thread, and return the bound port. A server already
     running under this module is stopped first.
+
+    Once the HTTP server is bound, kicks off `backfill.run()` on its own
+    daemon thread for every known project plus `cairn_dir` itself - the
+    bound port is returned immediately after, never waiting on however
+    long backfill takes. `backfill` is imported here, function-scoped,
+    rather than at this module's top - `backfill.py` imports `server` at
+    its own module level, and keeping that the only direction avoids an
+    import cycle. `backfill_enabled=False` lets a caller (tests
+    indifferent to backfill) opt out entirely.
     """
     stop()
     app = TokenMeteringApp(cairn_dir)
@@ -1058,6 +1073,15 @@ def start(cairn_dir: Path, host: str = DEFAULT_HOST, port: int = 0) -> int:
     with _server_lock:
         _server_state["httpd"] = httpd
         _server_state["thread"] = thread
+    if backfill_enabled:
+        import backfill  # noqa: E402
+
+        known_projects = [project.root for project in app.projects()]
+        threading.Thread(
+            target=backfill.run,
+            kwargs={"known_projects": known_projects, "local_project": cairn_dir},
+            daemon=True,
+        ).start()
     return httpd.server_address[1]
 
 
