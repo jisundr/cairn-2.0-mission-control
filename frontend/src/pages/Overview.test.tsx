@@ -92,6 +92,23 @@ describe("Overview", () => {
     expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
   });
 
+  it("goal 1: changing the shared range control re-fetches every range-scoped panel", async () => {
+    const fetchMock = installFetchMock(baseHandlers());
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("tool-rollup")).toHaveTextContent("Edit"));
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByTestId("range-seg-30d"));
+
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes("/api/rollup/tool") && u.includes("range=30d"))).toBe(true);
+      expect(urls.some((u) => u.includes("/api/rollup/agent") && u.includes("range=30d"))).toBe(true);
+      expect(urls.some((u) => u.includes("/api/heatmap") && u.includes("range=30d"))).toBe(true);
+    });
+  });
+
   it("shows PanelError with a working retry when the By-tool rollup fails", async () => {
     const fetchMock = installFetchMock(baseHandlers({ "/api/rollup/tool": serverError() }));
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
