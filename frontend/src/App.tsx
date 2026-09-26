@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AppTab } from "./components/AppHeader";
+import { Drilldown } from "./pages/Drilldown";
 import { Overview } from "./pages/Overview";
 import { SessionsList } from "./pages/SessionsList";
 
@@ -64,7 +65,7 @@ export function App() {
   }, []);
 
   if (viewSessionId) {
-    return <div className="shell">Session {viewSessionId}</div>;
+    return <Drilldown sessionId={viewSessionId} onBack={() => navigateToTab("sessions")} />;
   }
 
   if (activeTab === "overview") {

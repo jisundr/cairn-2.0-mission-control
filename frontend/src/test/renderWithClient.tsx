@@ -7,7 +7,11 @@ import type { ReactElement } from "react";
 // would make an induced-failure test slow and flaky rather than deterministic.
 export function renderWithClient(ui: ReactElement) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    // `retry: false` covers most queries; a couple of hooks (useSessionTrace,
+    // useCallDetails) set their own retry predicate that overrides this
+    // default, so `retryDelay: 0` also collapses their backoff to
+    // effectively instant, keeping every test's default wait timeout usable.
+    defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } },
   });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
