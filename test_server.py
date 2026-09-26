@@ -905,13 +905,22 @@ def test_write_known_projects_atomic_write_never_yields_a_torn_read(tmp_path):
             toggle = not toggle
 
     def reader():
+        # An empty read before the file's first write is fine and skipped.
+        # But once this reader has observed real content, a later empty
+        # read means the file was truncated before the replacement content
+        # landed - that's the torn-read signature a non-atomic
+        # truncate-then-write producer leaves behind, so it counts too.
+        seen_non_empty = False
         while not stop_event.is_set():
             try:
                 raw = path.read_text()
             except OSError:
                 continue
             if not raw:
-                continue  # not written yet
+                if seen_non_empty:
+                    torn_reads.append(raw)
+                continue
+            seen_non_empty = True
             if raw != expected_a and raw != expected_b:
                 torn_reads.append(raw)
 
