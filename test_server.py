@@ -1,5 +1,7 @@
 import json
 import sys
+import threading
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -874,3 +876,107 @@ def test_http_smoke_catch_all_serves_placeholder_when_static_missing(tmp_path):
             assert "text/html" in resp.headers.get("Content-Type", "")
     finally:
         server.stop()
+
+
+# --------------------------------------------------------------------------
+# Discovery hardening: atomic known-projects.json writes, TTL-cached
+# discovery keyed by root (never by label)
+# --------------------------------------------------------------------------
+
+
+def test_write_known_projects_atomic_write_never_yields_a_torn_read(tmp_path):
+    # A writer thread alternates between two distinct multi-entry lists via
+    # write_known_projects() while several reader threads loop reading the
+    # same path - every successful read must equal one of the two complete
+    # lists, exactly, never a partial/mixed/corrupt read.
+    path = tmp_path / "known-projects.json"
+    list_a = [tmp_path / f"a-{i}" for i in range(25)]
+    list_b = [tmp_path / f"b-{i}" for i in range(25)]
+    expected_a = json.dumps([str(r) for r in list_a])
+    expected_b = json.dumps([str(r) for r in list_b])
+
+    stop_event = threading.Event()
+    torn_reads = []
+
+    def writer():
+        toggle = True
+        while not stop_event.is_set():
+            server.write_known_projects(path, list_a if toggle else list_b)
+            toggle = not toggle
+
+    def reader():
+        while not stop_event.is_set():
+            try:
+                raw = path.read_text()
+            except OSError:
+                continue
+            if not raw:
+                continue  # not written yet
+            if raw != expected_a and raw != expected_b:
+                torn_reads.append(raw)
+
+    writer_thread = threading.Thread(target=writer)
+    reader_threads = [threading.Thread(target=reader) for _ in range(4)]
+    writer_thread.start()
+    for t in reader_threads:
+        t.start()
+
+    time.sleep(0.5)
+    stop_event.set()
+    writer_thread.join()
+    for t in reader_threads:
+        t.join()
+
+    assert torn_reads == []
+
+
+def test_projects_caches_discovery_within_ttl_but_recomputes_when_ttl_is_zero(tmp_path, monkeypatch):
+    root = tmp_path / "proj"
+    root.mkdir()
+    call_count = {"n": 0}
+    real_discover_projects = server.discover_projects
+
+    def counting_discover_projects(*args, **kwargs):
+        call_count["n"] += 1
+        return real_discover_projects(*args, **kwargs)
+
+    monkeypatch.setattr(server, "discover_projects", counting_discover_projects)
+
+    cached_app = server.TokenMeteringApp(root, discovery_cache_ttl=60)
+    for _ in range(5):
+        cached_app.projects()
+    assert call_count["n"] == 1
+
+    call_count["n"] = 0
+    uncached_app = server.TokenMeteringApp(root, discovery_cache_ttl=0)
+    for _ in range(5):
+        uncached_app.projects()
+    assert call_count["n"] == 5
+
+
+def test_projects_cache_survives_a_label_collision_after_expiry_keyed_by_root(tmp_path):
+    org1 = tmp_path / "org1" / "backend"
+    org2 = tmp_path / "org2" / "backend"
+    org3 = tmp_path / "org3" / "backend"
+    org1.mkdir(parents=True)
+    org2.mkdir(parents=True)
+
+    known_projects_path = tmp_path / "known-projects.json"
+    known_projects_path.write_text(json.dumps([str(org2)]))
+
+    app = server.TokenMeteringApp(org1, known_projects_path=known_projects_path, discovery_cache_ttl=1000)
+    first_by_root = {p.root: p.label for p in app.projects()}
+    assert set(first_by_root.values()) == {"org1/backend", "org2/backend"}
+
+    # Force expiry (as if the TTL had elapsed), then add a third project
+    # that collides on the same last-segment label, reassigning both
+    # existing labels in the process.
+    cached_at, cached_projects = app._discovery_cache
+    app._discovery_cache = (cached_at - 2000, cached_projects)
+    org3.mkdir(parents=True)
+    known_projects_path.write_text(json.dumps([str(org2), str(org3)]))
+
+    second_by_root = {p.root: p.label for p in app.projects()}
+    assert second_by_root[org1.resolve()] == "org1/backend"
+    assert second_by_root[org2.resolve()] == "org2/backend"
+    assert second_by_root[org3.resolve()] == "org3/backend"

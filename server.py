@@ -21,10 +21,13 @@ Usage:
 import http.server
 import json
 import mimetypes
+import os
 import re
 import sqlite3
 import sys
+import tempfile
 import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -136,6 +139,32 @@ def discover_projects(local_root: Path, known_projects_path: Path | None = None)
                     roots.append(other_root)
 
     return [Project(label=label, root=root) for label, root in zip(_disambiguate_labels(roots), roots)]
+
+
+def write_known_projects(path: Path, roots: list[Path]) -> None:
+    """Atomically writes `known-projects.json`: a temp file in `path`'s own
+    parent directory, then `os.replace()` into `path`. `os.replace()` is a
+    single filesystem rename, so a concurrent `discover_projects()` read
+    always observes either the prior complete file or the new complete
+    file - never a torn, partially-written read. No production caller yet
+    (the existing `hooks/stop-tokens.sh` write path is out of this phase's
+    scope and keeps serving unchanged); this is the hardened primitive a
+    later cutover repoints to.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps([str(r) for r in roots])
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(payload)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def _filter_projects(projects: list[Project], project_filter: str | None) -> list[Project]:
@@ -587,6 +616,15 @@ def _open_readonly(db_path: Path, table: str) -> sqlite3.Connection | None:
     return conn
 
 
+# Discovery-cache TTL (Goal 3): `discover_projects()` does filesystem I/O
+# (stat-ing every known root) and JSON parsing, so a single incoming
+# request cycle that calls `TokenMeteringApp.projects()` more than once
+# (several rollup routes touched by one page load, say) shouldn't repeat
+# that work each time. 5s keeps a stale scope (a project added mid-session)
+# from lingering long, while still collapsing same-cycle redundant calls.
+_DISCOVERY_CACHE_TTL_SECONDS = 5
+
+
 class TokenMeteringApp:
     """Query layer, independent of HTTP. `handle_api` is the thin dispatch
     layer `Handler` (the socket-facing class below) delegates to.
@@ -599,14 +637,28 @@ class TokenMeteringApp:
         known_projects_path: Path | None = None,
         claude_projects_dir: Path | None = None,
         static_dir: Path | None = None,
+        discovery_cache_ttl: float = _DISCOVERY_CACHE_TTL_SECONDS,
     ):
         self.project_root = Path(project_root).resolve()
         self.known_projects_path = known_projects_path
         self.claude_projects_dir = Path(claude_projects_dir) if claude_projects_dir else DEFAULT_CLAUDE_PROJECTS_DIR
         self.static_dir = Path(static_dir) if static_dir else Path(__file__).resolve().parent / STATIC_DIR_NAME
+        self.discovery_cache_ttl = discovery_cache_ttl
+        # One slot, scoped to this app instance's own `project_root`/
+        # `known_projects_path` by construction - an app instance never
+        # serves more than one root, so this can never become a second
+        # structure indexed by `Project.label` (which a label collision or
+        # rename between calls could invalidate or fragment).
+        self._discovery_cache: tuple[float, list["Project"]] | None = None
 
     def projects(self) -> list[Project]:
-        return discover_projects(self.project_root, self.known_projects_path)
+        if self._discovery_cache is not None:
+            cached_at, cached_projects = self._discovery_cache
+            if time.monotonic() - cached_at < self.discovery_cache_ttl:
+                return cached_projects
+        fresh = discover_projects(self.project_root, self.known_projects_path)
+        self._discovery_cache = (time.monotonic(), fresh)
+        return fresh
 
     # -- fetch (I/O) --------------------------------------------------
 
