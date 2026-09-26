@@ -48,6 +48,18 @@ export function formatStarted(iso: string): string {
   return `${year}-${month}-${day} ${hh}:${mm}`;
 }
 
+// Session-total runtime ("41m", "1h 05m") - mm:ss/h:mm reads better than
+// formatDuration's decimal-seconds form (built for the ~seconds-long call
+// rows in a Drilldown) once a session runs to minutes or hours.
+export function formatSessionDuration(startIso: string, endIso: string): string {
+  const totalSeconds = Math.max(0, (new Date(endIso).getTime() - new Date(startIso).getTime()) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${Math.round(totalSeconds)}s`;
+}
+
 export function formatRelativeToNow(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
   const diffMs = now.getTime() - then;

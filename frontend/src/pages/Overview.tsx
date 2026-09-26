@@ -23,7 +23,7 @@ import { StatCard } from "../components/StatCard";
 import { AlertTriangleIcon, InboxIcon, RefreshIcon } from "../components/icons";
 import { TokensPerDayChart } from "../components/TokensPerDayChart";
 import { WarningBanner } from "../components/WarningBanner";
-import { formatCost, formatTokens } from "../lib/format";
+import { formatCost, formatRelativeToNow, formatTokens } from "../lib/format";
 
 const RANGE_LABEL: Record<RangeKey, string> = {
   today: "Today",
@@ -167,7 +167,7 @@ function OverviewLoaded({
         hostTag={hostTag}
         connected
         onRefresh={handleRefresh}
-        updatedLabel={lastUpdated ? `updated ${Math.max(0, Math.round((Date.now() - lastUpdated.getTime()) / 1000))}s ago` : null}
+        updatedLabel={lastUpdated ? `updated ${formatRelativeToNow(lastUpdated.toISOString())}` : null}
       />
 
       <WarningBanner events={usageLimitEvents.data ?? []} onViewSession={onSelectSession} />

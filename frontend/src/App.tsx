@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AppTab } from "./components/AppHeader";
 import { Overview } from "./pages/Overview";
+import { SessionsList } from "./pages/SessionsList";
 
 type View = { kind: "tab"; tab: AppTab } | { kind: "session"; sessionId: string };
 
@@ -70,9 +71,5 @@ export function App() {
     return <Overview activeTab={activeTab} onTabChange={navigateToTab} onSelectSession={navigateToSession} />;
   }
 
-  return (
-    <div className="shell" onClick={() => navigateToSession("placeholder")}>
-      Sessions coming up
-    </div>
-  );
+  return <SessionsList activeTab={activeTab} onTabChange={navigateToTab} onSelectSession={navigateToSession} />;
 }
