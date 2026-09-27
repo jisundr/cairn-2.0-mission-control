@@ -9,13 +9,15 @@ import {
   useToolRollup,
   useUsageLimitEvents,
 } from "../api/hooks";
-import type { ProjectSummary, RangeKey, SessionSummary } from "../api/types";
+import type { CountRollupRow, GroupRollupRow, ProjectSummary, RangeKey, SessionSummary } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
 import { ContributionCalendar } from "../components/ContributionCalendar";
+import { isUnknownCost } from "../components/InfoDot";
 import { InstallScopeRow } from "../components/InstallScopeRow";
 import { Panel, PanelTitle } from "../components/Panel";
 import { PanelError } from "../components/PanelError";
 import { ProjectCostPanel } from "../components/ProjectCostPanel";
+import { StackedBarPanel, type StackedBarRow } from "../components/StackedBarPanel";
 import { StateCard } from "../components/StateCard";
 import { AlertTriangleIcon, InboxIcon, RefreshIcon } from "../components/icons";
 import { TokensPerDayChart } from "../components/TokensPerDayChart";
@@ -42,6 +44,23 @@ function sessionOverlapsDate(session: SessionSummary, date: string): boolean {
   const dayStart = `${date}T00:00:00Z`;
   const dayEnd = `${date}T23:59:59.999Z`;
   return session.started <= dayEnd && session.ended >= dayStart;
+}
+
+// O3: By models/By agents rows carry exact cost+tokens (both group rollups
+// sum priced `calls` rows); By tools carries a call-count share only - see
+// PLAN.md's Summary and B2's day_detail() docstring for why per-tool cost
+// isn't attributable from the real schema.
+function costTokenRows(rows: GroupRollupRow[]): StackedBarRow[] {
+  return rows.map((r) => ({
+    key: r.key,
+    value: r.tokens,
+    display: `${formatCost(r.cost)} (${formatTokens(r.tokens)})`,
+    unknown: isUnknownCost(r.cost),
+  }));
+}
+
+function callCountRows(rows: CountRollupRow[]): StackedBarRow[] {
+  return rows.map((r) => ({ key: r.key, value: r.count, display: `${r.count} call${r.count === 1 ? "" : "s"}` }));
 }
 
 interface OverviewProps {
@@ -185,6 +204,17 @@ function OverviewLoaded({
     : sessionsFiltered.data?.length ?? null;
   const breakdownLabel = selectedDate ? `${selectedDate} · ${VIEW_LABEL[view]}` : VIEW_LABEL[view];
 
+  // O3: By models/tools/agents - aggregate (the active range's own rollup)
+  // vs. day-selected (B2's day_detail() breakdown), same source split
+  // Breakdown above uses.
+  const byModelsRows = costTokenRows(selectedDate ? dayDetail.data?.by_model ?? [] : modelRollup.data ?? []);
+  const byModelsError = selectedDate ? dayDetail.isError : modelRollup.isError;
+  const byToolsRows = callCountRows(selectedDate ? dayDetail.data?.by_tool ?? [] : toolRollup.data ?? []);
+  const byToolsError = selectedDate ? dayDetail.isError : toolRollup.isError;
+  const byAgentsRows = costTokenRows(selectedDate ? dayDetail.data?.by_agent ?? [] : agentRollup.data ?? []);
+  const byAgentsError = selectedDate ? dayDetail.isError : agentRollup.isError;
+  const byPanelsLabel = selectedDate ? selectedDate : VIEW_LABEL[view];
+
   return (
     <div className="shell">
       <AppHeader
@@ -266,6 +296,62 @@ function OverviewLoaded({
               <span className="val">{sessionCount !== null ? sessionCount : "…"}</span>
             </div>
           </div>
+        </Panel>
+      </div>
+
+      <div className="grid grid-3">
+        <Panel err={byModelsError}>
+          <div className="trend-panel-head">
+            <PanelTitle err={byModelsError} style={{ margin: 0 }}>
+              By models
+            </PanelTitle>
+            <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
+              {byPanelsLabel}
+            </span>
+          </div>
+          {byModelsError ? (
+            <div className="err-inline">
+              <PanelError message="Couldn't load — request failed" onRetry={() => (selectedDate ? dayDetail.refetch() : modelRollup.refetch())} testId="by-models-error" />
+            </div>
+          ) : (
+            <StackedBarPanel data-testid="by-models" rows={byModelsRows} emptyText="No model usage yet." />
+          )}
+        </Panel>
+
+        <Panel err={byToolsError}>
+          <div className="trend-panel-head">
+            <PanelTitle err={byToolsError} style={{ margin: 0 }}>
+              By tools
+            </PanelTitle>
+            <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
+              {byPanelsLabel}
+            </span>
+          </div>
+          {byToolsError ? (
+            <div className="err-inline">
+              <PanelError message="Couldn't load — request failed" onRetry={() => (selectedDate ? dayDetail.refetch() : toolRollup.refetch())} testId="by-tools-error" />
+            </div>
+          ) : (
+            <StackedBarPanel data-testid="by-tools" rows={byToolsRows} emptyText="No tool calls yet." />
+          )}
+        </Panel>
+
+        <Panel err={byAgentsError}>
+          <div className="trend-panel-head">
+            <PanelTitle err={byAgentsError} style={{ margin: 0 }}>
+              By agents
+            </PanelTitle>
+            <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
+              {byPanelsLabel}
+            </span>
+          </div>
+          {byAgentsError ? (
+            <div className="err-inline">
+              <PanelError message="Couldn't load — request failed" onRetry={() => (selectedDate ? dayDetail.refetch() : agentRollup.refetch())} testId="by-agents-error" />
+            </div>
+          ) : (
+            <StackedBarPanel data-testid="by-agents" rows={byAgentsRows} emptyText="No agent activity yet." />
+          )}
         </Panel>
       </div>
 

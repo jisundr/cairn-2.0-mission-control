@@ -143,6 +143,24 @@ describe("Overview", () => {
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
   });
 
+  it("O3: renders aggregate By models/tools/agents, then drills them into the selected day", async () => {
+    installFetchMock(baseHandlers());
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("by-models")).toHaveTextContent("sonnet-5"));
+    expect(screen.getByTestId("by-tools")).toHaveTextContent("12 calls");
+    expect(screen.getByTestId("by-agents")).toHaveTextContent("builder");
+
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
+    // Same seeded rollup rows come back from /api/rollup/day-detail's
+    // by_model/by_tool/by_agent (baseHandlers' default) - still visible,
+    // now sourced from the day-detail fetch instead of the range rollups.
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$12.40"));
+    expect(screen.getByTestId("by-models")).toHaveTextContent("sonnet-5");
+    expect(screen.getByTestId("by-tools")).toHaveTextContent("12 calls");
+    expect(screen.getByTestId("by-agents")).toHaveTextContent("builder");
+  });
+
   it("O2: switching views clears the selected day", async () => {
     installFetchMock(baseHandlers());
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
