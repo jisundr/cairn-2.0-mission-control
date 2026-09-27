@@ -1,5 +1,5 @@
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { SessionSummary } from "../api/types";
+import type { ProjectSummary, SessionSummary } from "../api/types";
 import { estimateTextWidth } from "../lib/chartText";
 import { formatCost } from "../lib/format";
 import { ChartInfoMark } from "./ChartInfoMark";
@@ -12,6 +12,34 @@ interface ProjectTotal {
   cost: number | "unknown";
 }
 
+// Goal 8: a project's own label maps to its ultimate ancestor's label
+// (walking `parent` per `/api/projects`, added server-side in C1/C10) -
+// e.g. both `engine` and `site` map to `ai-worth-carrying`, their filesystem
+// parent, which then carries their sessions' cost in its own row instead of
+// each showing as an independent top-level project. A cycle (which
+// `discover_projects()` should never itself produce, but this walk doesn't
+// assume that) stops after `projects.length` hops rather than looping
+// forever, falling back to the project's own label. Also the fallback when
+// `projects` is empty or still loading, or a session's `project` isn't in
+// it at all (a label `sessions` mentions that the current `/api/projects`
+// fetch doesn't, however that might happen) - a session's own label is
+// always at least as good a bucket as dropping it.
+function buildRootLabels(projects: ProjectSummary[]): Map<string, string> {
+  const byLabel = new Map(projects.map((p) => [p.label, p]));
+  const maxHops = projects.length;
+  const roots = new Map<string, string>();
+  for (const project of projects) {
+    let current = project;
+    let hops = 0;
+    while (current.parent !== null && byLabel.has(current.parent) && hops < maxHops) {
+      current = byLabel.get(current.parent)!;
+      hops += 1;
+    }
+    roots.set(project.label, current.label);
+  }
+  return roots;
+}
+
 // Goal 4's fix: sums each project's **cost**, not tokens, and renders even
 // for a single-project install (today's ProjectsPanel.tsx sums tokens and
 // is gated `multiProject &&`, hidden entirely below 2 projects). There's
@@ -20,16 +48,21 @@ interface ProjectTotal {
 // ever shown as a real number when *every* contributing session has a
 // priced cost; one `null`-cost session marks the whole project "unknown"
 // (with goal 3's info-mark) rather than silently coercing that session's
-// cost to zero and understating the total.
-function projectTotals(sessions: SessionSummary[]): ProjectTotal[] {
+// cost to zero and understating the total. `rootLabels` (goal 8) buckets
+// each session under its root label rather than its own `project`, so a
+// root with no sessions of its own but children with sessions still gets a
+// row - the bucket exists because a child mapped into it.
+function projectTotals(sessions: SessionSummary[], rootLabels: Map<string, string>): ProjectTotal[] {
+  const rootLabel = (project: string) => rootLabels.get(project) ?? project;
   const sums = new Map<string, number>();
   const unresolved = new Set<string>();
   for (const s of sessions) {
+    const label = rootLabel(s.project);
     if (s.cost === null) {
-      unresolved.add(s.project);
+      unresolved.add(label);
       continue;
     }
-    sums.set(s.project, (sums.get(s.project) ?? 0) + s.cost);
+    sums.set(label, (sums.get(label) ?? 0) + s.cost);
   }
   const labels = new Set([...sums.keys(), ...unresolved]);
   return [...labels]
@@ -44,6 +77,7 @@ function projectTotals(sessions: SessionSummary[]): ProjectTotal[] {
 
 interface ProjectCostPanelProps {
   sessions: SessionSummary[];
+  projects: ProjectSummary[];
   selectedProject: string | undefined;
   onSelectProject: (project: string | undefined) => void;
 }
@@ -56,8 +90,8 @@ const ROW_HEIGHT = 28;
 // `BarChart` doesn't give this for free), same `filter-chip` clear-X in
 // `PanelTitle`, plus a header-level `InfoDot` explaining both what's
 // clickable and that this is a per-project cost, not a percentage.
-export function ProjectCostPanel({ sessions, selectedProject, onSelectProject }: ProjectCostPanelProps) {
-  const totals = projectTotals(sessions);
+export function ProjectCostPanel({ sessions, projects, selectedProject, onSelectProject }: ProjectCostPanelProps) {
+  const totals = projectTotals(sessions, buildRootLabels(projects));
   const max = Math.max(...totals.map((t) => (t.cost === "unknown" ? 0 : t.cost)), 1);
   const height = totals.length * ROW_HEIGHT;
 

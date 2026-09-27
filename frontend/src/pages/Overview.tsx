@@ -9,7 +9,7 @@ import {
   useToolRollup,
   useUsageLimitEvents,
 } from "../api/hooks";
-import type { RangeKey } from "../api/types";
+import type { ProjectSummary, RangeKey } from "../api/types";
 import { ActivityHeatmap } from "../components/ActivityHeatmap";
 import { AppHeader, type AppTab } from "../components/AppHeader";
 import { HbarList } from "../components/HbarList";
@@ -103,6 +103,7 @@ export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewPr
       onTabChange={onTabChange}
       onSelectSession={onSelectSession}
       hostTag={hostTag}
+      projects={projects.data?.projects ?? []}
       range={range}
       onRangeChange={setRange}
       projectFilter={projectFilter}
@@ -116,6 +117,7 @@ interface OverviewLoadedProps {
   onTabChange: (tab: AppTab) => void;
   onSelectSession: (sessionId: string) => void;
   hostTag: string;
+  projects: ProjectSummary[];
   range: RangeKey;
   onRangeChange: (range: RangeKey) => void;
   projectFilter: string | undefined;
@@ -127,6 +129,7 @@ function OverviewLoaded({
   onTabChange,
   onSelectSession,
   hostTag,
+  projects,
   range,
   onRangeChange,
   projectFilter,
@@ -252,6 +255,7 @@ function OverviewLoaded({
         <div className="col">
           <ProjectCostPanel
             sessions={sessionsAllProjects.data ?? []}
+            projects={projects}
             selectedProject={projectFilter}
             onSelectProject={onProjectFilterChange}
           />
