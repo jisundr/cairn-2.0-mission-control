@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
 import type { HeatmapRow } from "../api/types";
+import { mixHex, useHeatColors } from "../lib/heatColor";
 
 const DOW_COUNT = 7;
 const HOUR_COUNT = 24;
@@ -115,32 +115,3 @@ function HeatCell({ cx, cy, payload, max, colors }: HeatCellProps) {
   );
 }
 
-// `color-mix(in srgb, var(--add) X%, var(--border-soft))` is a CSS string,
-// not usable inline on an SVG `fill` the same way - resolves both custom
-// properties to concrete hex values once (light/dark-mode aware, since
-// `getComputedStyle` reads whichever `@media (prefers-color-scheme)` block
-// is active) and mixes in plain JS instead.
-function useHeatColors(): { add: string; border: string } {
-  const [colors, setColors] = useState({ add: "#2f8f49", border: "#ece9e1" });
-  useEffect(() => {
-    const styles = getComputedStyle(document.documentElement);
-    const add = styles.getPropertyValue("--add").trim();
-    const border = styles.getPropertyValue("--border-soft").trim();
-    setColors({ add: add || "#2f8f49", border: border || "#ece9e1" });
-  }, []);
-  return colors;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
-  if (!match) return null;
-  return { r: parseInt(match[1], 16), g: parseInt(match[2], 16), b: parseInt(match[3], 16) };
-}
-
-function mixHex(base: string, tint: string, t: number): string {
-  const from = hexToRgb(base);
-  const to = hexToRgb(tint);
-  if (!from || !to) return t > 0 ? tint : base;
-  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
-  return `rgb(${mix(from.r, to.r)}, ${mix(from.g, to.g)}, ${mix(from.b, to.b)})`;
-}
