@@ -129,14 +129,12 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .chart-tooltip-row { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-soft); }
 .chart-tooltip-row + .chart-tooltip-row { margin-top: 2px; }
 
-/* ---- hbar list (row-level styling now lives inline in each Recharts
-   `shape`/`tick` renderer - HbarList.tsx, TruncatedAxisTick.tsx,
-   ProjectCostPanel.tsx - since goal 6 needs per-row layout math no static
-   class can express) ---- */
-.hbar-sign { width: 1ch; flex-shrink: 0; font-family: var(--mono); font-weight: 700; text-align: center; color: var(--ink-faint); }
-.hbar-sign.add { color: var(--add); }
-.hbar-scope { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
-.hbar-value { width: 58px; flex-shrink: 0; text-align: right; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink); }
+/* ---- hbar list: row-level styling now lives inline in each Recharts
+   `shape`/`tick` renderer (HbarList.tsx, TruncatedAxisTick.tsx,
+   ProjectCostPanel.tsx), since goal 6 needs per-row layout math no static
+   class can express - .hbar-sign/-label/-scope/-track/-fill/-value are all
+   dead once ProjectCostPanel (this class's last user) moves to Recharts
+   too ---- */
 
 .filter-chip {
   display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; font-weight: 600;
