@@ -589,6 +589,37 @@ def test_discover_projects_unrelated_roots_have_no_parent(tmp_path):
     assert all(p.parent is None for p in projects)
 
 
+def test_filter_projects_cascades_to_a_known_roots_children(tmp_path):
+    """Goal 8's cascade: filtering by a parent project label matches that
+    project's own sessions (there may be none - the common case when a
+    rollup row's on-screen total is entirely its children's) plus every
+    known child's, not just an exact `.label` match.
+    """
+    parent_root = make_project(tmp_path, "ai-worth-carrying")
+    engine_root = make_project(
+        parent_root, "engine",
+        calls=[make_call(request_id="e1", session_id="sess-engine", agent="main", input_tokens=1_000_000, output_tokens=0)],
+    )
+    site_root = make_project(
+        parent_root, "site",
+        calls=[make_call(request_id="s1", session_id="sess-site", agent="main", input_tokens=2_000_000, output_tokens=0)],
+    )
+
+    known_projects_path = tmp_path / "known-projects.json"
+    known_projects_path.write_text(json.dumps([str(engine_root), str(site_root)]))
+
+    app = server.TokenMeteringApp(parent_root, known_projects_path=known_projects_path)
+    by_label = {p.label: p for p in app.projects()}
+    assert by_label["engine"].parent == "ai-worth-carrying"
+    assert by_label["site"].parent == "ai-worth-carrying"
+
+    rows = app._ranged_calls("life", "ai-worth-carrying")
+    assert {r["project"] for r in rows} == {"engine", "site"}
+    grouped = server.rollup_group(rows, key_fn=lambda r: r["project"])
+    totals = {g["key"]: g["tokens"] for g in grouped}
+    assert totals == {"engine": 1_000_000, "site": 2_000_000}
+
+
 def test_handle_api_projects_reports_the_system_hostname_and_each_projects_parent(tmp_path, monkeypatch):
     monkeypatch.setattr(server.socket, "gethostname", lambda: "my-laptop")
     root = make_project(tmp_path, "solo-project")

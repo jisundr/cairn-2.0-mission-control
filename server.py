@@ -190,9 +190,28 @@ def write_known_projects(path: Path, roots: list[Path]) -> None:
 
 
 def _filter_projects(projects: list[Project], project_filter: str | None) -> list[Project]:
+    """`project_filter` matches a project whose own label equals it, or one
+    of that project's descendants (goal 8's cascade) - walking `.parent`
+    labels up from each candidate until it either reaches `project_filter`
+    or runs out of known ancestors. A parent-rollup row's click therefore
+    filters in its own sessions plus every child's, matching what the
+    rolled-up total on that row already shows. `_compute_parents` derives
+    `.parent` from filesystem containment, which can't produce a cycle (two
+    roots can't each be a subdirectory of the other), so no cycle guard here.
+    """
     if not project_filter or project_filter == "all":
         return projects
-    return [p for p in projects if p.label == project_filter]
+    by_label = {p.label: p for p in projects}
+
+    def _matches(project: Project) -> bool:
+        current: Project | None = project
+        while current is not None:
+            if current.label == project_filter:
+                return True
+            current = by_label.get(current.parent) if current.parent else None
+        return False
+
+    return [p for p in projects if _matches(p)]
 
 
 # --------------------------------------------------------------------------
