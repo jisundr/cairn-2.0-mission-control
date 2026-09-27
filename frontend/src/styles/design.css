@@ -129,10 +129,6 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .chart-tooltip-row { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-soft); }
 .chart-tooltip-row + .chart-tooltip-row { margin-top: 2px; }
 
-/* ---- heatmap ---- */
-.heatmap { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
-.heatmap .cell { aspect-ratio: 1; border-radius: 2px; background: var(--border-soft); }
-
 /* ---- hbar list ---- */
 .hbar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
 .hbar-row:last-child { border-bottom: none; }
