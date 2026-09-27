@@ -180,6 +180,27 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .filter-chip .plus svg { width: 12px; height: 12px; stroke: var(--add-line); }
 @keyframes flash { 0% { transform: scale(1.6); } 100% { transform: scale(1); } }
 
+/* ---- Calendar view (F7): GitHub-style contribution heatmap, on the app's
+   existing --add scale (ActivityHeatmap already colors intensity this way)
+   rather than a separate color system - see lib/heatColor.ts. ---- */
+.cal-body { display: flex; gap: 8px; align-items: flex-start; }
+.cal-daylabels { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.cal-daylabels div { height: 13px; display: flex; align-items: center; font-family: var(--mono); font-size: 9px; color: var(--ink-faint); }
+.cal-scroll { overflow-x: auto; padding-bottom: 2px; }
+.cal-grid { display: flex; gap: 4px; }
+.cal-week { display: flex; flex-direction: column; gap: 4px; }
+.cal-cell { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; cursor: pointer; }
+.cal-cell.zerofill { background: transparent; cursor: default; }
+.cal-cell.today { position: relative; }
+.cal-cell.today::after {
+  content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--ink); transform: translateX(-50%);
+}
+.cal-cell.selected { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 8px; }
+.cal-legend .sw { width: 11px; height: 11px; border-radius: 2px; }
+.cal-legend .lbl { font-family: var(--mono); font-size: 9px; color: var(--ink-faint); }
+
 /* ---- stacked-bar panels (F5): By models / By tools / By agents / By
    project - a GitHub-language-bar-style proportional segmented bar plus a
    legend, on the same 3-tier ink/ink-soft/ink-faint monochrome scale the
