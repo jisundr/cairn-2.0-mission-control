@@ -21,7 +21,8 @@ const SESSION: SessionSummary = {
 
 function install(overrides: Record<string, ReturnType<typeof envelope> | { status: number; body: unknown }> = {}) {
   return installFetchMock({
-    "/api/projects": () => overrides["/api/projects"] ?? envelope([{ label: "cairn-2.0" }]),
+    "/api/projects": () =>
+      overrides["/api/projects"] ?? envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }),
     "/api/rollup/session": () => overrides["/api/rollup/session"] ?? envelope([SESSION]),
   });
 }

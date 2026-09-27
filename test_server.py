@@ -540,6 +540,18 @@ def test_empty_known_projects_file_means_project_scope_only(tmp_path):
     assert [p.label for p in app.projects()] == ["solo-project"]
 
 
+def test_handle_api_projects_reports_the_system_hostname_and_each_projects_parent(tmp_path, monkeypatch):
+    monkeypatch.setattr(server.socket, "gethostname", lambda: "my-laptop")
+    root = make_project(tmp_path, "solo-project")
+    app = server.TokenMeteringApp(root)
+
+    status, body = app.handle_api("/api/projects", {})
+
+    assert status == 200
+    assert body["data"]["hostname"] == "my-laptop"
+    assert body["data"]["projects"] == [{"label": "solo-project", "parent": None}]
+
+
 # --------------------------------------------------------------------------
 # Cold start: empty/missing tokens.db
 # --------------------------------------------------------------------------

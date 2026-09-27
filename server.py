@@ -23,6 +23,7 @@ import json
 import mimetypes
 import os
 import re
+import socket
 import sqlite3
 import sys
 import tempfile
@@ -62,6 +63,7 @@ VALID_RANGES = {"today", "7d", "30d", "month", "6m", "life"}
 class Project:
     label: str
     root: Path
+    parent: str | None = None
 
     @property
     def db_path(self) -> Path:
@@ -897,7 +899,13 @@ class TokenMeteringApp:
             return values[0] if values else default
 
         if path == "/api/projects":
-            return 200, self._envelope([{"label": p.label} for p in self.projects()])
+            return 200, {
+                "data": {
+                    "hostname": socket.gethostname(),
+                    "projects": [{"label": p.label, "parent": p.parent} for p in self.projects()],
+                },
+                "meta": {"generated_at": _iso(datetime.now(timezone.utc))},
+            }
 
         range_key = first("range", "7d")
         project_filter = first("project")

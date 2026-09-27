@@ -10,6 +10,12 @@ export interface Envelope<T> {
 
 export interface ProjectSummary {
   label: string;
+  parent: string | null;
+}
+
+export interface ProjectsResponse {
+  hostname: string;
+  projects: ProjectSummary[];
 }
 
 export interface TimeseriesPoint {

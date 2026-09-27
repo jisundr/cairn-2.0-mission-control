@@ -10,7 +10,7 @@ import type {
   Envelope,
   GroupRollupRow,
   HeatmapRow,
-  ProjectSummary,
+  ProjectsResponse,
   RangeKey,
   SessionSummary,
   SessionTrace,
@@ -45,7 +45,7 @@ export interface RangeParams {
 }
 
 export const api = {
-  projects: () => apiGet<ProjectSummary[]>("/projects"),
+  projects: () => apiGet<ProjectsResponse>("/projects"),
 
   timeseries: ({ range, project }: RangeParams) => apiGet<Timeseries>("/rollup/timeseries", { range, project }),
 

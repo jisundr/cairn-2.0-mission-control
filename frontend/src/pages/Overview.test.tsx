@@ -21,7 +21,8 @@ const SESSION: SessionSummary = {
 
 function baseHandlers(overrides: Record<string, ReturnType<typeof envelope> | { status: number; body: unknown }> = {}) {
   return {
-    "/api/projects": () => overrides["/api/projects"] ?? envelope([{ label: "cairn-2.0" }]),
+    "/api/projects": () =>
+      overrides["/api/projects"] ?? envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }),
     "/api/rollup/session": (params: URLSearchParams) => {
       if (params.get("range") === "life" && overrides["/api/rollup/session:life"]) {
         return overrides["/api/rollup/session:life"] as ReturnType<typeof envelope>;

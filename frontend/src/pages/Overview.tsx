@@ -43,9 +43,9 @@ interface OverviewProps {
 export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewProps) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
-  const hostTag = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
 
   const projects = useProjects();
+  const hostTag = projects.data?.hostname ?? "localhost";
   // Unscoped by range/project - answers "has backfill ever found anything,
   // for anyone" for the empty-state check below, independent of whatever
   // range/filter the page happens to be showing.

@@ -26,9 +26,9 @@ interface SessionsListProps {
 export function SessionsList({ activeTab, onTabChange, onSelectSession }: SessionsListProps) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
-  const hostTag = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
 
   const projects = useProjects();
+  const hostTag = projects.data?.hostname ?? "localhost";
   const sessions = useSessions({ range, project: projectFilter });
 
   return (
@@ -46,12 +46,12 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
 
       <RangeControl value={range} onChange={setRange} />
 
-      {(projects.data?.length ?? 0) > 1 && (
+      {(projects.data?.projects.length ?? 0) > 1 && (
         <div className="segs" data-testid="project-filter" style={{ marginBottom: 14, display: "inline-flex" }}>
           <div className={cn("seg", !projectFilter && "active")} onClick={() => setProjectFilter(undefined)}>
             All projects
           </div>
-          {(projects.data ?? []).map((p) => (
+          {(projects.data?.projects ?? []).map((p) => (
             <div
               key={p.label}
               className={cn("seg", projectFilter === p.label && "active")}
