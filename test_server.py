@@ -204,6 +204,35 @@ def test_day_detail_accepts_an_unpadded_date_and_still_matches_zero_padded_rows(
     assert detail["by_model"][0]["calls"] == 1
 
 
+def test_day_detail_adds_by_tool_and_by_agent_for_the_same_window(tmp_path):
+    root = make_project(
+        tmp_path, "proj",
+        calls=[
+            make_call(request_id="r1", agent="builder", timestamp="2026-08-05T10:00:00Z", input_tokens=100, output_tokens=0),
+            make_call(request_id="r2", agent="reviewer", timestamp="2026-08-05T11:00:00Z", input_tokens=50, output_tokens=0),
+            # Outside the window (the next day) - excluded from every group,
+            # same as it already is from by_model.
+            make_call(request_id="r3", agent="builder", timestamp="2026-08-06T10:00:00Z", input_tokens=999, output_tokens=0),
+        ],
+        tool_uses=[
+            make_tool_use(tool_use_id="t1", request_id="r1", agent="builder", tool_name="Bash", timestamp="2026-08-05T10:00:00Z"),
+            make_tool_use(tool_use_id="t2", request_id="r1", agent="builder", tool_name="Bash", timestamp="2026-08-05T10:05:00Z"),
+            make_tool_use(tool_use_id="t3", request_id="r2", agent="reviewer", tool_name="Read", timestamp="2026-08-05T11:00:00Z"),
+            make_tool_use(tool_use_id="t4", request_id="r3", agent="builder", tool_name="Bash", timestamp="2026-08-06T10:00:00Z"),
+        ],
+    )
+    app = server.TokenMeteringApp(root)
+
+    detail = app.day_detail("2026-08-05")
+
+    by_tool = {g["key"]: g["count"] for g in detail["by_tool"]}
+    assert by_tool == {"Bash": 2, "Read": 1}
+
+    by_agent = {g["key"]: g for g in detail["by_agent"]}
+    assert by_agent["builder"]["tokens"] == 100
+    assert by_agent["reviewer"]["tokens"] == 50
+
+
 def test_heatmap_returns_raw_per_call_timestamp_and_tokens_rows(tmp_path):
     # Bucketing (day-of-week/hour, in the viewer's local time zone) happens
     # client-side in ActivityHeatmap.tsx - the server only projects each

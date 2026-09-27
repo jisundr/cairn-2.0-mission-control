@@ -45,13 +45,6 @@ export interface ModelCostRow {
   cost: number | null;
 }
 
-export interface DayDetail {
-  date: string;
-  total_tokens: number;
-  total_cost: number | null;
-  by_model: ModelCostRow[];
-}
-
 export interface GroupRollupRow {
   key: string;
   calls: number;
@@ -62,6 +55,18 @@ export interface GroupRollupRow {
 export interface CountRollupRow {
   key: string;
   count: number;
+}
+
+export interface DayDetail {
+  date: string;
+  total_tokens: number;
+  total_cost: number | null;
+  by_model: ModelCostRow[];
+  // by_tool is call-count share only - tool_uses rows carry no cost of
+  // their own and there's no join back to the cost-bearing calls row(s)
+  // a tool invocation belongs to (see PLAN.md's By-tools note).
+  by_tool: CountRollupRow[];
+  by_agent: GroupRollupRow[];
 }
 
 // Raw per-call row for the activity heatmap's range (the last 7 days) -

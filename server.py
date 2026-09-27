@@ -830,18 +830,30 @@ class TokenMeteringApp:
         }
 
     def day_detail(self, date_str: str, project_filter: str | None = None) -> dict:
+        """`by_tool` is call-count share only (`rollup_tool_group`, same as
+        `tool_rollup`) - `tool_uses` rows carry no cost of their own, and
+        there's no join back to the `calls` row(s) a tool invocation belongs
+        to that would let a call's cost be attributed to its tool(s) (see
+        By-tools' Summary note in PLAN.md). `by_agent` reuses the same
+        `calls` rows `by_model` already fetched - exact cost/tokens, like
+        `agent_rollup`.
+        """
         projects = _filter_projects(self.projects(), project_filter)
         day_start = datetime.strptime(date_str, "%Y-%m-%d")
         since = _iso(day_start)
         until = _iso(day_start + timedelta(days=1))
         rows = self._fetch_calls(projects, since=since, until=until)
         by_model = rollup_group(rows, key_fn=lambda r: r["model"])
+        by_agent = rollup_group(rows, key_fn=lambda r: r["agent"])
+        by_tool = rollup_tool_group(self._fetch_tool_uses(projects, since=since, until=until), key_fn=_tool_key)
         any_unknown = any(g["cost"] is None for g in by_model)
         return {
             "date": date_str,
             "total_tokens": sum(g["tokens"] for g in by_model),
             "total_cost": None if any_unknown else round(sum(g["cost"] for g in by_model), 6),
             "by_model": by_model,
+            "by_tool": by_tool,
+            "by_agent": by_agent,
         }
 
     def agent_rollup(self, range_key: str, project_filter: str | None = None) -> list[dict]:
