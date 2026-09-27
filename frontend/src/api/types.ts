@@ -1,7 +1,10 @@
 // Mirrors server.py's JSON shapes (TokenMeteringApp.handle_api). Every
 // response is enveloped as { data, meta: { generated_at } }.
 
-export type RangeKey = "today" | "7d" | "30d" | "month" | "6m" | "life";
+// "13w" is Overview's Calendar view's fixed 91-day window - never offered in
+// RangeControl.tsx's own 6 options, only ContributionCalendar's internal
+// useTimeseries call.
+export type RangeKey = "today" | "7d" | "30d" | "month" | "6m" | "life" | "13w";
 
 export interface Envelope<T> {
   data: T;

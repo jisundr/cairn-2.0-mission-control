@@ -25,6 +25,9 @@ import { TokensPerDayChart } from "../components/TokensPerDayChart";
 import { WarningBanner } from "../components/WarningBanner";
 import { formatCost, formatRelativeToNow, formatTokens } from "../lib/format";
 
+// "13w" is never offered in this page's own RangeControl (it's
+// ContributionCalendar's internal fixed window, added server-side in B1) -
+// carried here only so this Record stays total over RangeKey.
 const RANGE_LABEL: Record<RangeKey, string> = {
   today: "Today",
   "7d": "7D",
@@ -32,6 +35,7 @@ const RANGE_LABEL: Record<RangeKey, string> = {
   month: "Month",
   "6m": "6M",
   life: "Life",
+  "13w": "13W",
 };
 
 interface OverviewProps {

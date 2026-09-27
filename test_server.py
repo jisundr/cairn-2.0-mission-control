@@ -99,6 +99,9 @@ def test_resolve_range_day_counts():
     since, _, _ = server.resolve_range("6m", now=now)
     assert since == "2026-02-28T00:00:00Z"  # 182 days inclusive of today
 
+    since, _, _ = server.resolve_range("13w", now=now)
+    assert since == "2026-05-30T00:00:00Z"  # 91 days inclusive of today
+
 
 def test_range_bounds_life_has_no_lower_bound():
     since, until = server.range_bounds("life", now=datetime(2026, 8, 28, tzinfo=timezone.utc))

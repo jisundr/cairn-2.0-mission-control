@@ -49,9 +49,12 @@ DEFAULT_CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 # spans today and the 6 days before it). "today" buckets by hour instead of
 # by day; "month" is the current calendar month to date; "life" has no fixed
 # window (it starts at the earliest captured call, or is empty if there are
-# none yet).
-_ROLLING_DAY_COUNTS = {"7d": 7, "30d": 30, "6m": 182}
-VALID_RANGES = {"today", "7d", "30d", "month", "6m", "life"}
+# none yet). "13w" is Overview's Calendar view's fixed window (91 days = 13
+# Monday-aligned weeks, matching its GitHub-style contribution grid) - never
+# user-facing in RangeControl.tsx's own 6 options, only ContributionCalendar's
+# internal fetch.
+_ROLLING_DAY_COUNTS = {"7d": 7, "30d": 30, "6m": 182, "13w": 91}
+VALID_RANGES = {"today", "7d", "30d", "month", "6m", "life", "13w"}
 
 
 # --------------------------------------------------------------------------
