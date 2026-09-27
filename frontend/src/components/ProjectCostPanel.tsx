@@ -1,11 +1,8 @@
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ProjectSummary, SessionSummary } from "../api/types";
-import { estimateTextWidth } from "../lib/chartText";
 import { formatCost } from "../lib/format";
-import { ChartInfoMark } from "./ChartInfoMark";
 import { InfoDot, isUnknownCost } from "./InfoDot";
 import { Panel, PanelTitle } from "./Panel";
-import { TruncatedAxisTick } from "./TruncatedAxisTick";
+import { StackedBarPanel, type StackedBarRow } from "./StackedBarPanel";
 
 interface ProjectTotal {
   label: string;
@@ -82,18 +79,24 @@ interface ProjectCostPanelProps {
   onSelectProject: (project: string | undefined) => void;
 }
 
-const ROW_HEIGHT = 28;
+function toStackedBarRows(totals: ProjectTotal[]): StackedBarRow[] {
+  return totals.map((t) => ({
+    key: t.label,
+    value: t.cost === "unknown" ? 0 : t.cost,
+    display: formatCost(t.cost),
+    unknown: isUnknownCost(t.cost),
+  }));
+}
 
-// `.hbar-row.clickable`/`.hbar-fill.selected` per overview-loaded.html,
-// rebuilt on Recharts (goal 5) - same click-to-filter behavior (via a
-// custom `Bar` `shape`'s own `onClick`, goal 5's own note that Recharts'
-// `BarChart` doesn't give this for free), same `filter-chip` clear-X in
-// `PanelTitle`, plus a header-level `InfoDot` explaining both what's
-// clickable and that this is a per-project cost, not a percentage.
+// `By project` per the overview-revamp mockups (F6) - restyled onto
+// StackedBarPanel (F5), keeping `projectTotals`/`buildRootLabels`'s own
+// per-project cost math and click-to-filter behavior unchanged (only the
+// rendering swapped, from a Recharts `BarChart` to the shared stacked-bar
+// visual every other By-panel now uses). Toggle-off-on-repeat-click still
+// lives here, not in StackedBarPanel: clicking the already-selected
+// project's legend row clears the filter.
 export function ProjectCostPanel({ sessions, projects, selectedProject, onSelectProject }: ProjectCostPanelProps) {
   const totals = projectTotals(sessions, buildRootLabels(projects));
-  const max = Math.max(...totals.map((t) => (t.cost === "unknown" ? 0 : t.cost)), 1);
-  const height = totals.length * ROW_HEIGHT;
 
   return (
     <Panel data-testid="project-cost-panel">
@@ -112,92 +115,13 @@ export function ProjectCostPanel({ sessions, projects, selectedProject, onSelect
           </span>
         )}
       </PanelTitle>
-      {totals.length === 0 ? (
-        <p className="mono" style={{ color: "var(--ink-faint)", fontSize: 11.5 }}>
-          No sessions yet.
-        </p>
-      ) : (
-        <div style={{ width: "100%", height }}>
-          <ResponsiveContainer width="100%" height={height}>
-            <BarChart
-              data={totals.map((t) => ({ ...t, value: t.cost === "unknown" ? 0 : t.cost }))}
-              layout="vertical"
-              margin={{ top: 0, right: 74, bottom: 0, left: 0 }}
-              barCategoryGap={6}
-            >
-              <XAxis type="number" domain={[0, max]} hide />
-              <YAxis
-                type="category"
-                dataKey="label"
-                width={130}
-                interval={0}
-                tickLine={false}
-                axisLine={false}
-                tick={<TruncatedAxisTick />}
-              />
-              <Tooltip cursor={{ fill: "var(--panel-sunken)" }} content={<ProjectTooltip />} />
-              <Bar
-                dataKey="value"
-                isAnimationActive={false}
-                shape={(props: unknown) => (
-                  <ProjectRow
-                    {...(props as ProjectRowShapeProps)}
-                    selectedProject={selectedProject}
-                    onSelectProject={onSelectProject}
-                  />
-                )}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      <StackedBarPanel
+        rows={toStackedBarRows(totals)}
+        emptyText="No sessions yet."
+        selectedKey={selectedProject}
+        onSelectRow={(label) => onSelectProject(label === selectedProject ? undefined : label)}
+        rowTestId={(row) => `project-row-${row.key}`}
+      />
     </Panel>
-  );
-}
-
-interface ProjectRowShapeProps {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  payload: ProjectTotal;
-  selectedProject: string | undefined;
-  onSelectProject: (project: string | undefined) => void;
-}
-
-function ProjectRow({ x, y, width, height, payload: row, selectedProject, onSelectProject }: ProjectRowShapeProps) {
-  const selected = row.label === selectedProject;
-  const barHeight = Math.max(height - 9, 4);
-  const barY = y + (height - barHeight) / 2;
-  const cy = y + height / 2;
-  const labelX = x + Math.max(width, 0) + 8;
-  const display = formatCost(row.cost);
-
-  return (
-    <g
-      data-testid={`project-row-${row.label}`}
-      onClick={() => onSelectProject(selected ? undefined : row.label)}
-      style={{ cursor: "pointer" }}
-    >
-      <rect x={x} y={barY} width={Math.max(width, 1)} height={barHeight} rx={3} fill={selected ? "var(--add)" : "var(--ink-soft)"} />
-      <text x={labelX} y={cy} dy={4} fontFamily="var(--mono)" fontSize={12} fontWeight={600} fill="var(--ink)">
-        {display}
-      </text>
-      {isUnknownCost(row.cost) && <ChartInfoMark x={labelX + estimateTextWidth(display) + 6} y={cy} />}
-    </g>
-  );
-}
-
-function ProjectTooltip({ active, payload }: { active?: boolean; payload?: { payload: ProjectTotal }[] }) {
-  const row = payload?.[0]?.payload;
-  if (!active || !row) return null;
-  return (
-    <div className="chart-tooltip">
-      <div className="chart-tooltip-title mono">{row.label}</div>
-      <div className="chart-tooltip-row mono">
-        <span>{formatCost(row.cost)}</span>
-      </div>
-      {isUnknownCost(row.cost) && <div className="chart-tooltip-row mono">Model not yet priced</div>}
-    </div>
   );
 }

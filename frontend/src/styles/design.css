@@ -188,6 +188,9 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .stackbar .seg { height: 100%; }
 .stack-legend { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
 .stack-legend .item { display: flex; align-items: center; gap: 8px; }
+.stack-legend .item.clickable { cursor: pointer; }
+.stack-legend .item.selected .name { color: var(--add); font-weight: 600; }
+.stackbar .seg.selected { outline: 1px solid var(--add-line); outline-offset: -1px; }
 .stack-legend .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 .stack-legend .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--ink); }
 .stack-legend .val { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink); white-space: nowrap; }
