@@ -99,8 +99,8 @@ describe("Overview", () => {
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
     expect(screen.getByTestId("breakdown-tokens")).toHaveTextContent("184k");
     expect(screen.getByTestId("breakdown-sessions")).toHaveTextContent("1");
-    // Goal 4: per-project cost renders even for a single seeded project.
-    await waitFor(() => expect(screen.getByTestId("project-row-cairn-2.0")).toHaveTextContent("$12.40"));
+    // O4: no By-project panel on a single-project ("project") install.
+    expect(screen.queryByTestId("project-cost-panel")).not.toBeInTheDocument();
   });
 
   it("O1: shows an unpriced-model cost as unknown on the Breakdown panel", async () => {
@@ -159,6 +159,39 @@ describe("Overview", () => {
     expect(screen.getByTestId("by-models")).toHaveTextContent("sonnet-5");
     expect(screen.getByTestId("by-tools")).toHaveTextContent("12 calls");
     expect(screen.getByTestId("by-agents")).toHaveTextContent("builder");
+  });
+
+  it("O4: shows a By-project panel only on a multi-project (system) install, filtered by day on drill-in", async () => {
+    const OTHER_SESSION: SessionSummary = {
+      ...SESSION,
+      session_id: "other-session",
+      project: "wardstone",
+      started: "2026-09-20T11:58:00Z",
+      ended: "2026-09-20T12:39:00Z",
+      cost: 3,
+    };
+    installFetchMock(
+      baseHandlers({
+        "/api/projects": envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "cairn-2.0", parent: null },
+            { label: "wardstone", parent: null },
+          ],
+        }),
+        "/api/rollup/session": envelope([SESSION, OTHER_SESSION]),
+      }),
+    );
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("project-row-cairn-2.0")).toHaveTextContent("$12.40"));
+    expect(screen.getByTestId("project-row-wardstone")).toHaveTextContent("$3.00");
+
+    // Drilling into 2026-09-25 (only SESSION overlaps it) drops wardstone's
+    // row entirely - re-running projectTotals() over the date-filtered array.
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
+    await waitFor(() => expect(screen.getByTestId("project-row-cairn-2.0")).toHaveTextContent("$12.40"));
+    expect(screen.queryByTestId("project-row-wardstone")).not.toBeInTheDocument();
   });
 
   it("O2: switching views clears the selected day", async () => {

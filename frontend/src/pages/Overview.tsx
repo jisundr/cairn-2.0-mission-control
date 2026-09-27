@@ -215,6 +215,17 @@ function OverviewLoaded({
   const byAgentsError = selectedDate ? dayDetail.isError : agentRollup.isError;
   const byPanelsLabel = selectedDate ? selectedDate : VIEW_LABEL[view];
 
+  // O4: By project - only on a multi-project ("system") install, same
+  // `projects.length > 1` signal SessionsList.tsx already uses. Reuses
+  // sessionsAllProjects (Overview's own existing unfiltered fetch) rather
+  // than a new call; day-selected filters that same array for date
+  // overlap before handing it to ProjectCostPanel (F6) - its own
+  // projectTotals()/buildRootLabels() math is unchanged either way.
+  const multiProject = projects.length > 1;
+  const byProjectSessions = selectedDate
+    ? (sessionsAllProjects.data ?? []).filter((s) => sessionOverlapsDate(s, selectedDate))
+    : sessionsAllProjects.data ?? [];
+
   return (
     <div className="shell">
       <AppHeader
@@ -300,6 +311,15 @@ function OverviewLoaded({
       </div>
 
       <div className="grid grid-3">
+        {multiProject && (
+          <ProjectCostPanel
+            sessions={byProjectSessions}
+            projects={projects}
+            selectedProject={projectFilter}
+            onSelectProject={onProjectFilterChange}
+          />
+        )}
+
         <Panel err={byModelsError}>
           <div className="trend-panel-head">
             <PanelTitle err={byModelsError} style={{ margin: 0 }}>
@@ -354,13 +374,6 @@ function OverviewLoaded({
           )}
         </Panel>
       </div>
-
-      <ProjectCostPanel
-        sessions={sessionsAllProjects.data ?? []}
-        projects={projects}
-        selectedProject={projectFilter}
-        onSelectProject={onProjectFilterChange}
-      />
     </div>
   );
 }

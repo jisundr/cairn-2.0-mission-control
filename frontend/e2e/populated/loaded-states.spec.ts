@@ -30,7 +30,8 @@ test.describe("populated loaded states", () => {
     await expect(page.getByTestId("by-models")).toContainText("claude-sonnet-5");
     await expect(page.getByTestId("by-tools")).toContainText("Bash");
     await expect(page.getByTestId("by-agents")).toContainText("builder");
-    await expect(page.getByTestId("project-cost-panel")).toBeVisible();
+    // O4: this fixture seeds a single project - no By-project panel.
+    await expect(page.getByTestId("project-cost-panel")).toHaveCount(0);
     await expect(page.getByTestId("usage-limit-banner")).toBeVisible();
     await expect(page.getByTestId("usage-limit-banner")).toContainText("e2e-session-main");
 
