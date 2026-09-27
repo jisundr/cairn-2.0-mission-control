@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCallDetails, useSessionTrace } from "../api/hooks";
 import type { AgentTrace, CallDetail, TraceCall } from "../api/types";
 import { HbarList, type HbarRow } from "../components/HbarList";
@@ -105,18 +105,34 @@ export function Drilldown({ sessionId, onBack }: DrilldownProps) {
     .flatMap((agent) => agent.trace.map((call) => ({ call, agentName: agent.agent ?? "unknown" })))
     .sort((a, b) => a.call.global_position - b.call.global_position);
 
-  const detailQueries = useCallDetails(
-    sessionId,
-    mergedCalls.map((m) => m.call.global_position),
+  // Goal 7: call details load for what's actually scrolled into view, not
+  // every call in the session up front - a large session otherwise fires
+  // one request per call at mount, which can exceed what the browser/server
+  // sustain and fail outright. `visiblePositions` only grows (a position
+  // once fetched stays in `useCallDetails`' argument, so react-query's own
+  // per-position `queryKey` cache - not a refetch - serves it if it scrolls
+  // out of view and back). Reset per session: a stale position set from the
+  // previous session would otherwise carry over, since Drilldown doesn't
+  // remount between sessions (App.tsx never keys it by sessionId).
+  const [visiblePositions, setVisiblePositions] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    setVisiblePositions(new Set());
+  }, [sessionId]);
+
+  const detailQueries = useCallDetails(sessionId, [...visiblePositions]);
+  const detailByQueryPosition = new Map(
+    [...visiblePositions].map((position, i) => [
+      position,
+      { detail: detailQueries[i]?.data, isLoading: detailQueries[i]?.isLoading ?? false, isError: detailQueries[i]?.isError ?? false },
+    ]),
   );
 
   const detailByPosition = new Map<number, { detail: CallDetail | undefined; isLoading: boolean; isError: boolean }>();
-  mergedCalls.forEach((m, i) => {
-    detailByPosition.set(m.call.global_position, {
-      detail: detailQueries[i]?.data,
-      isLoading: detailQueries[i]?.isLoading ?? false,
-      isError: detailQueries[i]?.isError ?? false,
-    });
+  mergedCalls.forEach((m) => {
+    detailByPosition.set(
+      m.call.global_position,
+      detailByQueryPosition.get(m.call.global_position) ?? { detail: undefined, isLoading: false, isError: false },
+    );
   });
 
   const failedCount = detailQueries.filter((q) => q.isError).length;
@@ -130,6 +146,33 @@ export function Drilldown({ sessionId, onBack }: DrilldownProps) {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 120,
     overscan: 5,
+  });
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  useEffect(() => {
+    const positions = new Set<number>();
+    for (const item of virtualItems) {
+      const turn = turns[item.index];
+      if (!turn) continue;
+      for (const entry of turn.calls) positions.add(entry.call.global_position);
+    }
+    setVisiblePositions((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const position of positions) {
+        if (!next.has(position)) {
+          next.add(position);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // `turns` is recomputed every render (not memoized), so this effect uses
+    // its own shallow scan of `virtualItems`/`turns` rather than relying on
+    // React's dependency-array identity check to decide when to run - it
+    // runs every render, but the `changed` guard above means `setState` (and
+    // therefore a re-render) only actually happens when a genuinely new
+    // position enters view.
   });
 
   if (!trace) return null;
@@ -240,13 +283,17 @@ function ChatTurn({ sessionId, turn }: { sessionId: string; turn: Turn }) {
   const firstCall = turn.calls[0];
   const lastCall = turn.calls[turn.calls.length - 1];
   const finalResponse = lastCall.detail && lastCall.detail.available ? (lastCall.detail.response ?? "") : "";
-  const promptText = firstCall.isLoading
-    ? "loading…"
-    : firstCall.detail
-      ? firstCall.detail.available
-        ? firstCall.detail.prompt ?? ""
-        : "Transcript unavailable."
-      : "";
+  // A call whose position hasn't entered `visiblePositions` yet (freshly
+  // scrolled into the virtualizer's overscan window, one render before the
+  // scroll-triggered fetch effect above requests it) has no query result at
+  // all - `detail` undefined and `isLoading` false, the same shape as
+  // "still loading" from this component's point of view, so both read the
+  // same "loading…" rather than one of them going momentarily blank.
+  const promptText = firstCall.detail
+    ? firstCall.detail.available
+      ? firstCall.detail.prompt ?? ""
+      : "Transcript unavailable."
+    : "loading…";
 
   return (
     <div data-testid={`chat-turn-${sessionId}-${turn.firstGlobalPosition}`}>
