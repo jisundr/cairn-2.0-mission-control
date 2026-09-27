@@ -41,7 +41,7 @@ async function assertNoHorizontalOverflow(page: Page) {
 test.describe("layout sanity: no SVG or page exceeds a sane bounding box", () => {
   test("Overview", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("agent-rollup")).toBeVisible();
+    await expect(page.getByTestId("chart-bars")).toBeVisible();
     await assertNoOversizedSvg(page);
     await assertNoHorizontalOverflow(page);
   });

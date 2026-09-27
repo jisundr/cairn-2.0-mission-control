@@ -25,8 +25,13 @@ export function Panel({ children, err, className, style, "data-testid": testId }
 interface PanelTitleProps {
   children: ReactNode;
   err?: boolean;
+  style?: CSSProperties;
 }
 
-export function PanelTitle({ children, err }: PanelTitleProps) {
-  return <div className={cn("panel-title", err && "err")}>{children}</div>;
+export function PanelTitle({ children, err, style }: PanelTitleProps) {
+  return (
+    <div className={cn("panel-title", err && "err")} style={style}>
+      {children}
+    </div>
+  );
 }

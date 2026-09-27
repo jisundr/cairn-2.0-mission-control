@@ -1,43 +1,28 @@
 import { useState } from "react";
-import {
-  useAgentRollup,
-  useHeatmap,
-  useModelRollup,
-  useProjects,
-  useSessions,
-  useTimeseries,
-  useToolRollup,
-  useUsageLimitEvents,
-} from "../api/hooks";
+import { useAgentRollup, useModelRollup, useProjects, useSessions, useTimeseries, useToolRollup, useUsageLimitEvents } from "../api/hooks";
 import type { ProjectSummary, RangeKey } from "../api/types";
-import { ActivityHeatmap } from "../components/ActivityHeatmap";
 import { AppHeader, type AppTab } from "../components/AppHeader";
-import { HbarList } from "../components/HbarList";
-import { InfoDot, isUnknownCost } from "../components/InfoDot";
+import { ContributionCalendar } from "../components/ContributionCalendar";
 import { InstallScopeRow } from "../components/InstallScopeRow";
 import { Panel, PanelTitle } from "../components/Panel";
 import { PanelError } from "../components/PanelError";
 import { ProjectCostPanel } from "../components/ProjectCostPanel";
-import { RangeControl } from "../components/RangeControl";
 import { StateCard } from "../components/StateCard";
-import { StatCard } from "../components/StatCard";
 import { AlertTriangleIcon, InboxIcon, RefreshIcon } from "../components/icons";
 import { TokensPerDayChart } from "../components/TokensPerDayChart";
 import { WarningBanner } from "../components/WarningBanner";
 import { formatCost, formatRelativeToNow, formatTokens } from "../lib/format";
+import { cn } from "../lib/utils";
 
-// "13w" is never offered in this page's own RangeControl (it's
-// ContributionCalendar's internal fixed window, added server-side in B1) -
-// carried here only so this Record stays total over RangeKey.
-const RANGE_LABEL: Record<RangeKey, string> = {
-  today: "Today",
-  "7d": "7D",
-  "30d": "30D",
-  month: "Month",
-  "6m": "6M",
-  life: "Life",
-  "13w": "13W",
-};
+// A view's own fixed window, not a user-facing range option - Trend keeps
+// the day-by-day bar chart over the last 30 days ("30d"); Calendar's
+// GitHub-style grid covers the last 13 weeks ("13w", added server-side in
+// B1). Neither is offered in a shared RangeControl - this toggle replaces
+// it entirely (goal: Trend/Calendar, not Today/7D/30D/Month/6M/Life).
+type OverviewView = "trend" | "calendar";
+
+const VIEW_RANGE: Record<OverviewView, RangeKey> = { trend: "30d", calendar: "13w" };
+const VIEW_LABEL: Record<OverviewView, string> = { trend: "Last 30 days", calendar: "Last 13 weeks" };
 
 interface OverviewProps {
   activeTab: AppTab;
@@ -46,14 +31,14 @@ interface OverviewProps {
 }
 
 export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewProps) {
-  const [range, setRange] = useState<RangeKey>("7d");
+  const [view, setView] = useState<OverviewView>("trend");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
 
   const projects = useProjects();
   const hostTag = projects.data?.hostname ?? "localhost";
   // Unscoped by range/project - answers "has backfill ever found anything,
   // for anyone" for the empty-state check below, independent of whatever
-  // range/filter the page happens to be showing.
+  // view/filter the page happens to be showing.
   const anyHistory = useSessions({ range: "life" });
 
   if (projects.isError) {
@@ -109,8 +94,8 @@ export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewPr
       onSelectSession={onSelectSession}
       hostTag={hostTag}
       projects={projects.data?.projects ?? []}
-      range={range}
-      onRangeChange={setRange}
+      view={view}
+      onViewChange={setView}
       projectFilter={projectFilter}
       onProjectFilterChange={setProjectFilter}
     />
@@ -123,8 +108,8 @@ interface OverviewLoadedProps {
   onSelectSession: (sessionId: string) => void;
   hostTag: string;
   projects: ProjectSummary[];
-  range: RangeKey;
-  onRangeChange: (range: RangeKey) => void;
+  view: OverviewView;
+  onViewChange: (view: OverviewView) => void;
   projectFilter: string | undefined;
   onProjectFilterChange: (project: string | undefined) => void;
 }
@@ -135,38 +120,36 @@ function OverviewLoaded({
   onSelectSession,
   hostTag,
   projects,
-  range,
-  onRangeChange,
+  view,
+  onViewChange,
   projectFilter,
   onProjectFilterChange,
 }: OverviewLoadedProps) {
-  const todayTimeseries = useTimeseries({ range: "today", project: projectFilter });
-  const rangeTimeseries = useTimeseries({ range, project: projectFilter });
+  const range = VIEW_RANGE[view];
+  const timeseries = useTimeseries({ range, project: projectFilter });
   const sessionsFiltered = useSessions({ range, project: projectFilter });
   const sessionsAllProjects = useSessions({ range });
   const toolRollup = useToolRollup({ range, project: projectFilter });
   const agentRollup = useAgentRollup({ range, project: projectFilter });
   const modelRollup = useModelRollup({ range, project: projectFilter });
-  const heatmap = useHeatmap({ range, project: projectFilter });
   const usageLimitEvents = useUsageLimitEvents({ range: "7d", project: projectFilter });
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   function handleRefresh() {
-    todayTimeseries.refetch();
-    rangeTimeseries.refetch();
+    timeseries.refetch();
     sessionsFiltered.refetch();
     sessionsAllProjects.refetch();
     toolRollup.refetch();
     agentRollup.refetch();
     modelRollup.refetch();
-    heatmap.refetch();
     usageLimitEvents.refetch();
     setLastUpdated(new Date());
   }
 
-  const todayCost = todayTimeseries.data?.total_cost ?? null;
-  const rangeCost = rangeTimeseries.data?.total_cost ?? null;
+  const totalCost = timeseries.data?.total_cost ?? null;
+  const totalTokens = timeseries.data?.total_tokens ?? null;
+  const sessionCount = sessionsFiltered.data?.length ?? null;
 
   return (
     <div className="shell">
@@ -180,7 +163,16 @@ function OverviewLoaded({
 
       <WarningBanner events={usageLimitEvents.data ?? []} onViewSession={onSelectSession} />
 
-      <RangeControl value={range} onChange={onRangeChange} />
+      <div className="range-row" data-testid="view-toggle">
+        <div className="segs">
+          <div className={cn("seg", view === "trend" && "active")} data-testid="view-seg-trend" onClick={() => onViewChange("trend")}>
+            Trend
+          </div>
+          <div className={cn("seg", view === "calendar" && "active")} data-testid="view-seg-calendar" onClick={() => onViewChange("calendar")}>
+            Calendar
+          </div>
+        </div>
+      </div>
 
       <InstallScopeRow
         projects={projects}
@@ -189,139 +181,61 @@ function OverviewLoaded({
         onSelectProject={onProjectFilterChange}
       />
 
-      <div className="stats">
-        <StatCard
-          data-testid="stat-cost-today"
-          label="Cost today"
-          value={todayTimeseries.data ? formatCost(todayCost) : "…"}
-          faint={isUnknownCost(todayCost)}
-          infoDot={isUnknownCost(todayCost) && todayTimeseries.data ? <InfoDot /> : undefined}
-        />
-        <StatCard
-          data-testid="stat-tokens-today"
-          label="Tokens today"
-          value={todayTimeseries.data ? formatTokens(todayTimeseries.data.total_tokens) : "…"}
-        />
-        <StatCard
-          data-testid="stat-cost-range"
-          label={`Cost (${RANGE_LABEL[range]})`}
-          value={rangeTimeseries.data ? formatCost(rangeCost) : "…"}
-          faint={isUnknownCost(rangeCost)}
-          infoDot={isUnknownCost(rangeCost) && rangeTimeseries.data ? <InfoDot /> : undefined}
-        />
-        <StatCard
-          data-testid="stat-sessions-range"
-          label={`Sessions (${RANGE_LABEL[range]})`}
-          value={sessionsFiltered.data ? String(sessionsFiltered.data.length) : "…"}
-        />
+      <div className="grid grid-2" style={{ marginBottom: 16 }}>
+        <Panel err={timeseries.isError} style={{ display: "flex", flexDirection: "column" }}>
+          <div className="trend-panel-head">
+            <PanelTitle err={timeseries.isError} style={{ margin: 0 }}>
+              {view === "trend" ? "Token trends" : "Daily activity"}
+            </PanelTitle>
+            <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
+              {VIEW_LABEL[view]}
+            </span>
+          </div>
+          {timeseries.isError ? (
+            <div className="err-inline">
+              <PanelError message="Couldn't load — request failed" onRetry={() => timeseries.refetch()} testId="chart-error" />
+            </div>
+          ) : timeseries.data ? (
+            view === "trend" ? (
+              <TokensPerDayChart timeseries={timeseries.data} project={projectFilter} />
+            ) : (
+              <ContributionCalendar points={timeseries.data.points} selectedDate={null} onSelectDate={() => {}} />
+            )
+          ) : (
+            <div className="skel" style={{ height: 150 }} />
+          )}
+        </Panel>
+
+        <Panel style={{ display: "flex", flexDirection: "column" }}>
+          <div className="trend-panel-head">
+            <PanelTitle style={{ margin: 0 }}>Breakdown</PanelTitle>
+            <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
+              {VIEW_LABEL[view]}
+            </span>
+          </div>
+          <div className="kv-list" data-testid="breakdown">
+            <div className="kv-row" data-testid="breakdown-cost">
+              <span className="name">Cost</span>
+              <span className="val">{timeseries.data ? formatCost(totalCost) : "…"}</span>
+            </div>
+            <div className="kv-row" data-testid="breakdown-tokens">
+              <span className="name">Tokens</span>
+              <span className="val">{totalTokens !== null ? formatTokens(totalTokens) : "…"}</span>
+            </div>
+            <div className="kv-row" data-testid="breakdown-sessions">
+              <span className="name">Sessions</span>
+              <span className="val">{sessionCount !== null ? sessionCount : "…"}</span>
+            </div>
+          </div>
+        </Panel>
       </div>
 
-      <div className="grid">
-        <div className="col">
-          <Panel err={rangeTimeseries.isError}>
-            <PanelTitle err={rangeTimeseries.isError}>Tokens / cost per day</PanelTitle>
-            {rangeTimeseries.isError ? (
-              <div className="err-inline">
-                <PanelError message="Couldn't load — request failed" onRetry={() => rangeTimeseries.refetch()} testId="chart-error" />
-              </div>
-            ) : rangeTimeseries.data ? (
-              <TokensPerDayChart timeseries={rangeTimeseries.data} project={projectFilter} />
-            ) : (
-              <div className="skel" style={{ height: 150 }} />
-            )}
-          </Panel>
-
-          <Panel err={heatmap.isError}>
-            <PanelTitle err={heatmap.isError}>Activity heatmap</PanelTitle>
-            {heatmap.isError ? (
-              <div className="err-inline">
-                <PanelError message="Couldn't load — request failed" onRetry={() => heatmap.refetch()} testId="heatmap-error" />
-              </div>
-            ) : heatmap.data ? (
-              <ActivityHeatmap calls={heatmap.data} />
-            ) : (
-              <div className="skel" style={{ height: 90 }} />
-            )}
-          </Panel>
-
-          <Panel err={toolRollup.isError} style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
-            <PanelTitle err={toolRollup.isError}>
-              By tool
-              <InfoDot title="Number of calls that used each tool in the current range" />
-            </PanelTitle>
-            {toolRollup.isError ? (
-              <div className="err-inline">
-                <PanelError message="Couldn't load — request failed" onRetry={() => toolRollup.refetch()} testId="by-tool-error" />
-              </div>
-            ) : (
-              <HbarList
-                data-testid="tool-rollup"
-                rows={(toolRollup.data ?? []).map((r) => ({ label: r.key, value: r.count, display: String(r.count) }))}
-                emptyText="No tool calls yet."
-              />
-            )}
-          </Panel>
-        </div>
-
-        <div className="col">
-          <ProjectCostPanel
-            sessions={sessionsAllProjects.data ?? []}
-            projects={projects}
-            selectedProject={projectFilter}
-            onSelectProject={onProjectFilterChange}
-          />
-
-          <Panel err={agentRollup.isError}>
-            <PanelTitle err={agentRollup.isError}>
-              By agent
-              <InfoDot title="Share of tokens in the current range" />
-            </PanelTitle>
-            {agentRollup.isError ? (
-              <div className="err-inline">
-                <PanelError message="Couldn't load — request failed" onRetry={() => agentRollup.refetch()} testId="by-agent-error" />
-              </div>
-            ) : (
-              <HbarList
-                data-testid="agent-rollup"
-                rows={agentRollupPercentRows(agentRollup.data ?? [])}
-                emptyText="No agent activity yet."
-              />
-            )}
-          </Panel>
-
-          <Panel err={modelRollup.isError}>
-            <PanelTitle err={modelRollup.isError}>
-              By model
-              <InfoDot title="Share of tokens in the current range" />
-            </PanelTitle>
-            {modelRollup.isError ? (
-              <div className="err-inline">
-                <PanelError message="Couldn't load — request failed" onRetry={() => modelRollup.refetch()} testId="by-model-error" />
-              </div>
-            ) : (
-              <HbarList
-                data-testid="model-rollup"
-                rows={(modelRollup.data ?? []).map((r) => ({
-                  label: r.key,
-                  value: r.tokens,
-                  display: formatCost(r.cost),
-                  unknown: isUnknownCost(r.cost),
-                }))}
-                emptyText="No model usage yet."
-              />
-            )}
-          </Panel>
-        </div>
-      </div>
+      <ProjectCostPanel
+        sessions={sessionsAllProjects.data ?? []}
+        projects={projects}
+        selectedProject={projectFilter}
+        onSelectProject={onProjectFilterChange}
+      />
     </div>
   );
-}
-
-function agentRollupPercentRows(rows: { key: string; tokens: number }[]) {
-  const total = rows.reduce((sum, r) => sum + r.tokens, 0);
-  return rows.map((r) => ({
-    label: r.key,
-    value: r.tokens,
-    display: total > 0 ? `${Math.round((r.tokens / total) * 100)}%` : "0%",
-  }));
 }

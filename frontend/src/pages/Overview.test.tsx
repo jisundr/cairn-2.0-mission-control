@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { SessionSummary } from "../api/types";
+import type { SessionSummary, Timeseries } from "../api/types";
 import { envelope, installFetchMock, serverError } from "../test/mockApi";
 import { renderWithClient } from "../test/renderWithClient";
 import { Overview } from "./Overview";
@@ -19,6 +19,30 @@ const SESSION: SessionSummary = {
   usage_limit_hit: false,
 };
 
+function trendSeries(total_cost: number | null = 41.1): Timeseries {
+  return {
+    range: "30d",
+    bucket: "day",
+    since: "",
+    until: "",
+    points: [{ bucket: "2026-09-25", calls: 12, tokens: 184204, cost: 12.4 }],
+    total_tokens: 184204,
+    total_cost,
+  };
+}
+
+function calendarSeries(): Timeseries {
+  return {
+    range: "13w",
+    bucket: "day",
+    since: "",
+    until: "",
+    points: [{ bucket: "2026-09-25", calls: 12, tokens: 184204, cost: 12.4 }],
+    total_tokens: 184204,
+    total_cost: 41.1,
+  };
+}
+
 function baseHandlers(overrides: Record<string, ReturnType<typeof envelope> | { status: number; body: unknown }> = {}) {
   return {
     "/api/projects": () =>
@@ -31,30 +55,13 @@ function baseHandlers(overrides: Record<string, ReturnType<typeof envelope> | { 
       return overrides["/api/rollup/session"] ?? envelope([SESSION]);
     },
     "/api/rollup/timeseries": (params: URLSearchParams) => {
-      if (params.get("range") === "today") return overrides["/api/rollup/timeseries:today"] ?? envelope(todaySeries());
-      return overrides["/api/rollup/timeseries"] ?? envelope(rangeSeries());
+      if (params.get("range") === "13w") return overrides["/api/rollup/timeseries:13w"] ?? envelope(calendarSeries());
+      return overrides["/api/rollup/timeseries"] ?? envelope(trendSeries());
     },
     "/api/rollup/tool": () => overrides["/api/rollup/tool"] ?? envelope([{ key: "Edit", count: 12 }]),
     "/api/rollup/agent": () => overrides["/api/rollup/agent"] ?? envelope([{ key: "builder", calls: 12, tokens: 184204, cost: 12.4 }]),
     "/api/rollup/model": () => overrides["/api/rollup/model"] ?? envelope([{ key: "sonnet-5", calls: 12, tokens: 184204, cost: 12.4 }]),
-    "/api/heatmap": () => overrides["/api/heatmap"] ?? envelope([{ timestamp: "2026-09-25T11:58:00Z", tokens: 184204 }]),
     "/api/usage-limit-events": () => overrides["/api/usage-limit-events"] ?? envelope([]),
-  };
-}
-
-function todaySeries(total_cost: number | null = 12.4) {
-  return { range: "today", bucket: "hour", since: "", until: "", points: [], total_tokens: 184000, total_cost };
-}
-
-function rangeSeries(total_cost: number | null = 41.1) {
-  return {
-    range: "7d",
-    bucket: "day",
-    since: "",
-    until: "",
-    points: [{ bucket: "2026-09-25", calls: 12, tokens: 184204, cost: 12.4 }],
-    total_tokens: 184204,
-    total_cost,
   };
 }
 
@@ -65,7 +72,6 @@ describe("Overview", () => {
 
     expect(await screen.findByTestId("overview-disconnected")).toBeInTheDocument();
     expect(screen.getByTitle("Can't reach the local server")).toBeInTheDocument();
-    expect(screen.queryByText("Overview")).not.toBeInTheDocument();
   });
 
   it("shows the empty state when backfill found no history anywhere", async () => {
@@ -75,67 +81,51 @@ describe("Overview", () => {
     expect(await screen.findByTestId("overview-empty")).toBeInTheDocument();
   });
 
-  it("renders stats and the By-tool panel once every rollup resolves", async () => {
+  it("O1: renders the Trend chart and a Cost/Tokens/Sessions breakdown once every rollup resolves", async () => {
     installFetchMock(baseHandlers());
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
-    await waitFor(() => expect(screen.getByTestId("stat-cost-today")).toHaveTextContent("$12.40"));
-    await waitFor(() => expect(screen.getByTestId("tool-rollup")).toHaveTextContent("Edit"));
+    await waitFor(() => expect(screen.getByTestId("chart-bars")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
+    expect(screen.getByTestId("breakdown-tokens")).toHaveTextContent("184k");
+    expect(screen.getByTestId("breakdown-sessions")).toHaveTextContent("1");
     // Goal 4: per-project cost renders even for a single seeded project.
     await waitFor(() => expect(screen.getByTestId("project-row-cairn-2.0")).toHaveTextContent("$12.40"));
   });
 
-  it("shows an unpriced-model cost as unknown with an info-dot on the Cost stat", async () => {
-    installFetchMock(baseHandlers({ "/api/rollup/timeseries": envelope(rangeSeries(null)) }));
+  it("O1: shows an unpriced-model cost as unknown on the Breakdown panel", async () => {
+    installFetchMock(baseHandlers({ "/api/rollup/timeseries": envelope(trendSeries(null)) }));
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
-    await waitFor(() => expect(screen.getByTestId("stat-cost-range")).toHaveTextContent("unknown"));
-    expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("unknown"));
   });
 
-  it("shows an unpriced-model cost as unknown with an info-dot on the Cost today stat", async () => {
-    installFetchMock(baseHandlers({ "/api/rollup/timeseries:today": envelope(todaySeries(null)) }));
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
-
-    await waitFor(() => expect(screen.getByTestId("stat-cost-today")).toHaveTextContent("unknown"));
-    expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
-  });
-
-  it("shows an info-dot on a By-model row whose cost is unresolved", async () => {
-    installFetchMock(
-      baseHandlers({ "/api/rollup/model": envelope([{ key: "sonnet-5", calls: 12, tokens: 184204, cost: null }]) }),
-    );
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
-
-    await waitFor(() => expect(screen.getByTestId("model-rollup")).toHaveTextContent("unknown"));
-    expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
-  });
-
-  it("goal 1: changing the shared range control re-fetches every range-scoped panel", async () => {
+  it("O1: switching to Calendar re-fetches every range-scoped panel at the 13w window", async () => {
     const fetchMock = installFetchMock(baseHandlers());
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
-    await waitFor(() => expect(screen.getByTestId("tool-rollup")).toHaveTextContent("Edit"));
+    await waitFor(() => expect(screen.getByTestId("chart-bars")).toBeInTheDocument());
     fetchMock.mockClear();
 
-    fireEvent.click(screen.getByTestId("range-seg-30d"));
+    fireEvent.click(screen.getByTestId("view-seg-calendar"));
 
     await waitFor(() => {
       const urls = fetchMock.mock.calls.map((c) => String(c[0]));
-      expect(urls.some((u) => u.includes("/api/rollup/tool") && u.includes("range=30d"))).toBe(true);
-      expect(urls.some((u) => u.includes("/api/rollup/agent") && u.includes("range=30d"))).toBe(true);
-      expect(urls.some((u) => u.includes("/api/heatmap") && u.includes("range=30d"))).toBe(true);
+      expect(urls.some((u) => u.includes("/api/rollup/timeseries") && u.includes("range=13w"))).toBe(true);
+      expect(urls.some((u) => u.includes("/api/rollup/tool") && u.includes("range=13w"))).toBe(true);
+      expect(urls.some((u) => u.includes("/api/rollup/agent") && u.includes("range=13w"))).toBe(true);
     });
+    expect(await screen.findByTestId("contribution-calendar")).toBeInTheDocument();
   });
 
-  it("shows PanelError with a working retry when the By-tool rollup fails", async () => {
-    const fetchMock = installFetchMock(baseHandlers({ "/api/rollup/tool": serverError() }));
+  it("shows PanelError with a working retry when the Trend chart's timeseries fails", async () => {
+    const fetchMock = installFetchMock(baseHandlers({ "/api/rollup/timeseries": serverError() }));
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
-    expect(await screen.findByTestId("by-tool-error-text")).toHaveTextContent("Couldn't load — request failed");
+    expect(await screen.findByTestId("chart-error-text")).toHaveTextContent("Couldn't load — request failed");
     const callsBeforeRetry = fetchMock.mock.calls.length;
 
-    fireEvent.click(screen.getByTestId("by-tool-error-retry"));
+    fireEvent.click(screen.getByTestId("chart-error-retry"));
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(callsBeforeRetry));
   });
 });

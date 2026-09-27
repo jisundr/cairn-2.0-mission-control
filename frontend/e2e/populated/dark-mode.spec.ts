@@ -16,7 +16,7 @@ test("Overview renders under prefers-color-scheme: dark, no console errors", asy
   });
 
   await page.goto("/");
-  await expect(page.getByTestId("agent-rollup")).toBeVisible();
+  await expect(page.getByTestId("chart-bars")).toBeVisible();
 
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   // design.css's dark block repoints `--bg` from #fdfdfb (light) to

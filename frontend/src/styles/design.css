@@ -125,24 +125,27 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 }
 .dropdown-item:hover { background: var(--panel-sunken); }
 
-/* ---- stat cards ---- */
-.stats { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
-.stat {
-  flex: 1 1 180px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  padding: 14px 16px;
-}
-.stat-label {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
-  color: var(--ink-faint); display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
-}
-.stat-value { font-family: var(--mono); font-size: 25px; font-weight: 600; color: var(--ink); }
-.stat-value.faint { color: var(--ink-faint); font-size: 20px; }
+/* Overview's 4 stat cards (.stats/.stat/.stat-label/.stat-value) are gone
+   as of O1 - StatCard.tsx (their only consumer) was deleted with them, per
+   PLAN.md's "Remove: 4 stat cards". */
 .info-dot { display: inline-flex; color: var(--ink-faint); cursor: default; }
 .info-dot svg { width: 14px; height: 14px; }
 
 /* ---- grid / panel ---- */
 .grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
-.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/* Overview revamp (O1): utility column-count variants for the Trend/
+   Calendar+Breakdown row (grid-2) and the By models/tools/agents(/project)
+   row (grid-3) - respect the same 900px single-column collapse `.grid`
+   already does, per the media query below. */
+.grid-2 { grid-template-columns: 1.6fr 1fr; }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.trend-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.kv-list { display: flex; flex-direction: column; flex-grow: 1; }
+.kv-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; font-family: var(--mono); font-size: 11px; }
+.kv-row .name { font-weight: 500; color: var(--ink); }
+.kv-row .val { font-weight: 600; color: var(--ink); }
+.kv-row.total { border-top: 1px solid var(--border-soft); margin-top: 2px; padding-top: 8px; font-weight: 700; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; min-width: 0; }
 .panel.err { border-color: var(--remove); }
 .panel-title {
@@ -321,7 +324,7 @@ table.sessions a.sess:hover { text-decoration: underline; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 @media (max-width: 900px) {
-  .grid, .drill-grid { grid-template-columns: 1fr; }
+  .grid, .grid-2, .grid-3, .grid-4, .drill-grid { grid-template-columns: 1fr; }
   .shell { padding: 16px 16px 36px; }
   header.app { gap: 12px; }
   .app-right { width: 100%; justify-content: space-between; }
