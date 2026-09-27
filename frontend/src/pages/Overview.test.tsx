@@ -85,19 +85,19 @@ describe("Overview", () => {
     await waitFor(() => expect(screen.getByTestId("project-row-cairn-2.0")).toHaveTextContent("$12.40"));
   });
 
-  it("shows an unpriced-model cost as unknown* with an info-dot on the Cost stat", async () => {
+  it("shows an unpriced-model cost as unknown with an info-dot on the Cost stat", async () => {
     installFetchMock(baseHandlers({ "/api/rollup/timeseries": envelope(rangeSeries(null)) }));
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
-    await waitFor(() => expect(screen.getByTestId("stat-cost-range")).toHaveTextContent("unknown*"));
+    await waitFor(() => expect(screen.getByTestId("stat-cost-range")).toHaveTextContent("unknown"));
     expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
   });
 
-  it("shows an unpriced-model cost as unknown* with an info-dot on the Cost today stat", async () => {
+  it("shows an unpriced-model cost as unknown with an info-dot on the Cost today stat", async () => {
     installFetchMock(baseHandlers({ "/api/rollup/timeseries:today": envelope(todaySeries(null)) }));
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
-    await waitFor(() => expect(screen.getByTestId("stat-cost-today")).toHaveTextContent("unknown*"));
+    await waitFor(() => expect(screen.getByTestId("stat-cost-today")).toHaveTextContent("unknown"));
     expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
   });
 
@@ -107,7 +107,7 @@ describe("Overview", () => {
     );
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
 
-    await waitFor(() => expect(screen.getByTestId("model-rollup")).toHaveTextContent("unknown*"));
+    await waitFor(() => expect(screen.getByTestId("model-rollup")).toHaveTextContent("unknown"));
     expect(screen.getByTitle("Model not yet priced")).toBeInTheDocument();
   });
 

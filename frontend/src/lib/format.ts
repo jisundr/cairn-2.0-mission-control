@@ -5,7 +5,7 @@ export function formatTokens(n: number): string {
 }
 
 export function formatCost(cost: number | "unknown" | null): string {
-  if (cost === null || cost === "unknown") return "unknown*";
+  if (cost === null || cost === "unknown") return "unknown";
   return `$${cost.toFixed(2)}`;
 }
 

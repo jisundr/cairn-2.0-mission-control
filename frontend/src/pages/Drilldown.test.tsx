@@ -83,7 +83,7 @@ describe("Drilldown", () => {
 
     renderWithClient(<Drilldown sessionId={SESSION_ID} onBack={() => {}} />);
 
-    expect(await screen.findByTestId("agent-row-builder")).toHaveTextContent("unknown*");
+    expect(await screen.findByTestId("agent-row-builder")).toHaveTextContent("unknown");
     expect(screen.getAllByTitle("Model not yet priced").length).toBeGreaterThan(0);
   });
 
