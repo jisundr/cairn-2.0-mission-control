@@ -9,7 +9,6 @@ describe("AppHeader", () => {
       <AppHeader
         activeTab="overview"
         onTabChange={onTabChange}
-        hostTag="test-host.local"
         connected
         onRefresh={() => {}}
         updatedLabel={null}
@@ -28,7 +27,6 @@ describe("AppHeader", () => {
       <AppHeader
         activeTab="overview"
         onTabChange={() => {}}
-        hostTag="test-host.local"
         connected={false}
         onRefresh={() => {}}
         updatedLabel={null}

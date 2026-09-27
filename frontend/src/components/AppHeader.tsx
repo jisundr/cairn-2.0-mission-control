@@ -8,13 +8,13 @@ import { RefreshIcon } from "./icons";
 // render the same right-hand cluster on every screen: overview-empty.html
 // keeps the nav but drops refresh/updated-at; overview-disconnected.html
 // drops the nav entirely too; sessions-list-*.html keeps refresh but never
-// shows updated-at.
+// shows updated-at. The hostname (F2) moved out of here onto its own
+// `InstallScopeRow` - this header no longer takes or renders it.
 export type AppTab = "overview" | "sessions";
 
 interface AppHeaderProps {
   activeTab: AppTab;
   onTabChange: (tab: AppTab) => void;
-  hostTag: string;
   connected: boolean;
   showTabs?: boolean;
   onRefresh?: () => void;
@@ -24,7 +24,6 @@ interface AppHeaderProps {
 export function AppHeader({
   activeTab,
   onTabChange,
-  hostTag,
   connected,
   showTabs = true,
   onRefresh,
@@ -63,7 +62,6 @@ export function AppHeader({
         )}
       </div>
       <div className="app-right">
-        <span className="host-tag mono">{hostTag}</span>
         <span
           className={connected ? "status-dot" : "status-dot err"}
           title={connected ? "Connected to the local server" : "Can't reach the local server"}

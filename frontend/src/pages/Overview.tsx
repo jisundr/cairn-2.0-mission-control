@@ -14,6 +14,7 @@ import { ActivityHeatmap } from "../components/ActivityHeatmap";
 import { AppHeader, type AppTab } from "../components/AppHeader";
 import { HbarList } from "../components/HbarList";
 import { InfoDot, isUnknownCost } from "../components/InfoDot";
+import { InstallScopeRow } from "../components/InstallScopeRow";
 import { Panel, PanelTitle } from "../components/Panel";
 import { PanelError } from "../components/PanelError";
 import { ProjectCostPanel } from "../components/ProjectCostPanel";
@@ -58,7 +59,7 @@ export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewPr
   if (projects.isError) {
     return (
       <div className="shell">
-        <AppHeader activeTab={activeTab} onTabChange={onTabChange} hostTag={hostTag} connected={false} showTabs={false} />
+        <AppHeader activeTab={activeTab} onTabChange={onTabChange} connected={false} showTabs={false} />
         <StateCard
           err
           data-testid="overview-disconnected"
@@ -78,7 +79,7 @@ export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewPr
   if (anyHistory.isSuccess && anyHistory.data.length === 0) {
     return (
       <div className="shell">
-        <AppHeader activeTab={activeTab} onTabChange={onTabChange} hostTag={hostTag} connected showTabs />
+        <AppHeader activeTab={activeTab} onTabChange={onTabChange} connected showTabs />
         <StateCard
           data-testid="overview-empty"
           icon={<InboxIcon />}
@@ -172,7 +173,6 @@ function OverviewLoaded({
       <AppHeader
         activeTab={activeTab}
         onTabChange={onTabChange}
-        hostTag={hostTag}
         connected
         onRefresh={handleRefresh}
         updatedLabel={lastUpdated ? `updated ${formatRelativeToNow(lastUpdated.toISOString())}` : null}
@@ -181,6 +181,13 @@ function OverviewLoaded({
       <WarningBanner events={usageLimitEvents.data ?? []} onViewSession={onSelectSession} />
 
       <RangeControl value={range} onChange={onRangeChange} />
+
+      <InstallScopeRow
+        projects={projects}
+        hostTag={hostTag}
+        selectedProject={projectFilter}
+        onSelectProject={onProjectFilterChange}
+      />
 
       <div className="stats">
         <StatCard

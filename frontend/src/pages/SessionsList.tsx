@@ -3,10 +3,10 @@ import { useProjects, useSessions } from "../api/hooks";
 import type { RangeKey } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
 import { InfoDot, isUnknownCost } from "../components/InfoDot";
+import { InstallScopeRow } from "../components/InstallScopeRow";
 import { PanelError } from "../components/PanelError";
 import { RangeControl } from "../components/RangeControl";
 import { InboxIcon } from "../components/icons";
-import { cn } from "../lib/utils";
 import { formatCost, formatSessionDuration, formatStarted, shortId } from "../lib/format";
 
 interface SessionsListProps {
@@ -17,12 +17,10 @@ interface SessionsListProps {
 
 // pages/SessionsList.tsx per sessions-list-{loaded,error,empty}.html - its
 // own RangeControl instance (goal 1: Overview and Sessions List each own
-// one, not a page-spanning shared control) plus a project-filter pill row.
-// No mockup shows the pill row (the loaded demo just lists every project
-// unfiltered), but PLAN.md's Commit 4 calls for it - ported from
-// token-metering/frontend's SessionsTable.tsx project-filter pills,
-// restyled with the same `.segs`/`.seg` idiom RangeControl already uses
-// rather than inventing a new pill component.
+// one, not a page-spanning shared control), plus (F2) the same
+// InstallScopeRow Overview mounts, replacing this page's former ad-hoc
+// `.segs` project-filter pill row with the shared install-type row every
+// other screen in the revamp uses.
 export function SessionsList({ activeTab, onTabChange, onSelectSession }: SessionsListProps) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
@@ -36,7 +34,6 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
       <AppHeader
         activeTab={activeTab}
         onTabChange={onTabChange}
-        hostTag={hostTag}
         connected={!projects.isError}
         onRefresh={() => {
           projects.refetch();
@@ -46,23 +43,12 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
 
       <RangeControl value={range} onChange={setRange} />
 
-      {(projects.data?.projects.length ?? 0) > 1 && (
-        <div className="segs" data-testid="project-filter" style={{ marginBottom: 14, display: "inline-flex" }}>
-          <div className={cn("seg", !projectFilter && "active")} onClick={() => setProjectFilter(undefined)}>
-            All projects
-          </div>
-          {(projects.data?.projects ?? []).map((p) => (
-            <div
-              key={p.label}
-              className={cn("seg", projectFilter === p.label && "active")}
-              onClick={() => setProjectFilter(p.label)}
-              data-testid={`project-filter-${p.label}`}
-            >
-              {p.label}
-            </div>
-          ))}
-        </div>
-      )}
+      <InstallScopeRow
+        projects={projects.data?.projects ?? []}
+        hostTag={hostTag}
+        selectedProject={projectFilter}
+        onSelectProject={setProjectFilter}
+      />
 
       {sessions.isError ? (
         <div className="panel err" style={{ flexGrow: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
