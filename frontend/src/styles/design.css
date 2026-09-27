@@ -43,6 +43,7 @@ body {
 }
 ::selection { background: var(--add-bg); color: var(--add); }
 :focus-visible { outline: 2px solid var(--add-line); outline-offset: 2px; border-radius: 2px; }
+.recharts-wrapper:focus:not(:focus-visible) { outline: none; }
 .mono { font-family: var(--mono); font-variant-ligatures: none; font-feature-settings: "calt" 0, "liga" 0; font-variant-numeric: tabular-nums; }
 
 .shell { max-width: 1320px; margin: 0 auto; padding: 20px 28px 48px; }
