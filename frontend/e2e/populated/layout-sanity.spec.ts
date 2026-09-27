@@ -10,7 +10,12 @@ import { expect, type Page, test } from "@playwright/test";
 const MAX_ICON_PX = 48;
 
 async function assertNoOversizedSvg(page: Page) {
-  const boxes = await page.locator("svg").evaluateAll((nodes) =>
+  // `.recharts-surface` (goals 3-6's charts) is deliberately as large as its
+  // panel - only an *icon* svg growing unconstrained is the bug class this
+  // guards against, the same distinction the WarningBanner regression this
+  // check generalizes from already draws (a chart canvas, unlike an icon,
+  // has no fixed intrinsic size to fall back to).
+  const boxes = await page.locator("svg:not(.recharts-surface)").evaluateAll((nodes) =>
     nodes.map((n) => {
       const r = (n as SVGSVGElement).getBoundingClientRect();
       return { width: r.width, height: r.height };
