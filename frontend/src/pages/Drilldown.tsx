@@ -1,7 +1,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useRef, useState } from "react";
-import { useCallDetails, useSessionTrace } from "../api/hooks";
+import { useCallDetails, useProjects, useSessionTrace } from "../api/hooks";
 import type { AgentTrace, CallDetail, TraceCall } from "../api/types";
+import { AppHeader, type AppTab } from "../components/AppHeader";
 import { HbarList, type HbarRow } from "../components/HbarList";
 import { InfoDot, isUnknownCost } from "../components/InfoDot";
 import { Panel, PanelTitle } from "../components/Panel";
@@ -10,6 +11,8 @@ import { formatCost, formatSessionDuration, shortId } from "../lib/format";
 
 interface DrilldownProps {
   sessionId: string;
+  activeTab: AppTab;
+  onTabChange: (tab: AppTab) => void;
   onBack: () => void;
 }
 
@@ -90,8 +93,9 @@ function buildAgentTurns(
 // forward - the transcript here renders only each turn's prompt bubble,
 // its tool-call lines, and its final response bubble, matching the
 // mockups' literal markup.
-export function Drilldown({ sessionId, onBack }: DrilldownProps) {
-  const { data: trace } = useSessionTrace(sessionId);
+export function Drilldown({ sessionId, activeTab, onTabChange, onBack }: DrilldownProps) {
+  const projects = useProjects();
+  const { data: trace, refetch: refetchTrace } = useSessionTrace(sessionId);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const totalTokens = trace ? trace.agents.reduce((sum, a) => sum + a.tokens, 0) : 0;
@@ -177,8 +181,15 @@ export function Drilldown({ sessionId, onBack }: DrilldownProps) {
 
   if (!trace) return null;
 
+  function handleRefresh() {
+    refetchTrace();
+    detailQueries.forEach((q) => q.refetch());
+  }
+
   return (
     <div className="shell">
+      <AppHeader activeTab={activeTab} onTabChange={onTabChange} connected={!projects.isError} onRefresh={handleRefresh} />
+
       <div className="drill-header">
         <div className="drill-left">
           <a

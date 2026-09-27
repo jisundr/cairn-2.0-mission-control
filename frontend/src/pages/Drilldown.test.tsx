@@ -60,14 +60,21 @@ function callDetail(position: number): CallDetail {
   };
 }
 
+const noopTabChange = () => {};
+
+function projectsHandlers() {
+  return { "/api/projects": () => envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }) };
+}
+
 describe("Drilldown", () => {
   it("renders the agent breakdown and transcript once the trace and call detail resolve", async () => {
     installFetchMock({
+      ...projectsHandlers(),
       [`/api/session/${SESSION_ID}/trace`]: () => envelope(TRACE),
       [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
     });
 
-    renderWithClient(<Drilldown sessionId={SESSION_ID} onBack={() => {}} />);
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
 
     expect(await screen.findByTestId("agent-row-builder")).toHaveTextContent("$12.40");
     await waitFor(() => expect(screen.getByTestId("chat-thread")).toHaveTextContent("I think we need to have backfill"));
@@ -76,12 +83,13 @@ describe("Drilldown", () => {
 
   it("shows an unpriced agent cost with an info-dot", async () => {
     installFetchMock({
+      ...projectsHandlers(),
       [`/api/session/${SESSION_ID}/trace`]: () =>
         envelope({ ...TRACE, agents: [{ ...TRACE.agents[0], cost: null }] }),
       [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
     });
 
-    renderWithClient(<Drilldown sessionId={SESSION_ID} onBack={() => {}} />);
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
 
     expect(await screen.findByTestId("agent-row-builder")).toHaveTextContent("unknown");
     expect(screen.getAllByTitle("Model not yet priced").length).toBeGreaterThan(0);
@@ -89,11 +97,12 @@ describe("Drilldown", () => {
 
   it("shows a partial-failure banner with a working retry when a call detail fails, while the trace still renders", async () => {
     const fetchMock = installFetchMock({
+      ...projectsHandlers(),
       [`/api/session/${SESSION_ID}/trace`]: () => envelope(TRACE),
       [`/api/call/${SESSION_ID}/1`]: () => serverError("connection interrupted"),
     });
 
-    renderWithClient(<Drilldown sessionId={SESSION_ID} onBack={() => {}} />);
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
 
     expect(await screen.findByTestId("agent-row-builder")).toBeInTheDocument();
     expect(await screen.findByTestId("drilldown-partial-error-text")).toHaveTextContent("Couldn't load the last 1 call");
@@ -105,13 +114,30 @@ describe("Drilldown", () => {
 
   it("navigates back via the drill-back link", async () => {
     installFetchMock({
+      ...projectsHandlers(),
       [`/api/session/${SESSION_ID}/trace`]: () => envelope(TRACE),
       [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
     });
     const onBack = vi.fn();
-    renderWithClient(<Drilldown sessionId={SESSION_ID} onBack={onBack} />);
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={onBack} />);
 
     fireEvent.click(await screen.findByText("← Overview"));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  // F4: the shared AppHeader (wordmark, tabs, connection dot, refresh) now
+  // renders above .drill-header - previously this page had no shared chrome
+  // at all.
+  it("F4: renders the shared AppHeader above the drill-header, tied to its own connection state", async () => {
+    installFetchMock({
+      ...projectsHandlers(),
+      [`/api/session/${SESSION_ID}/trace`]: () => envelope(TRACE),
+      [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
+    });
+
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
+
+    expect(await screen.findByRole("link", { name: "Sessions" })).toHaveClass("active");
+    expect(screen.getByTitle("Connected to the local server")).toBeInTheDocument();
   });
 });

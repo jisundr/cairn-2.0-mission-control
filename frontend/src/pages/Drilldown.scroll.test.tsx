@@ -67,7 +67,7 @@ describe("Drilldown - scroll-triggered call-detail loading", () => {
       ),
     });
 
-    renderWithClient(<Drilldown sessionId={SESSION_ID} onBack={() => {}} />);
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={() => {}} onBack={() => {}} />);
 
     await waitFor(() => expect(screen.getByTestId("chat-thread")).toHaveTextContent(/prompt \d+/));
 

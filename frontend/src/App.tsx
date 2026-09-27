@@ -65,7 +65,14 @@ export function App() {
   }, []);
 
   if (viewSessionId) {
-    return <Drilldown sessionId={viewSessionId} onBack={() => navigateToTab("sessions")} />;
+    return (
+      <Drilldown
+        sessionId={viewSessionId}
+        activeTab={activeTab}
+        onTabChange={navigateToTab}
+        onBack={() => navigateToTab("sessions")}
+      />
+    );
   }
 
   if (activeTab === "overview") {
