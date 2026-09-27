@@ -212,11 +212,6 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .drill-cost { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--ink); }
 .drill-grid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
 
-.agent-row { display: flex; align-items: center; gap: 10px; }
-.agent-name { flex: 1; font-size: 12px; font-weight: 600; color: var(--ink); }
-.agent-pct { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
-.agent-bar-track { height: 5px; background: var(--border-soft); border-radius: 3px; overflow: hidden; margin: 6px 0 14px; }
-.agent-bar-fill { height: 100%; background: var(--ink-soft); }
 .agent-cost { text-align: right; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: -12px 0 14px; }
 
 .transcript { display: flex; flex-direction: column; gap: 10px; }

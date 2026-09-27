@@ -2,6 +2,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef } from "react";
 import { useCallDetails, useSessionTrace } from "../api/hooks";
 import type { AgentTrace, CallDetail, TraceCall } from "../api/types";
+import { HbarList, type HbarRow } from "../components/HbarList";
 import { InfoDot, isUnknownCost } from "../components/InfoDot";
 import { Panel, PanelTitle } from "../components/Panel";
 import { PanelError } from "../components/PanelError";
@@ -174,9 +175,13 @@ export function Drilldown({ sessionId, onBack }: DrilldownProps) {
       <div className="drill-grid">
         <Panel>
           <PanelTitle>Agents in this session</PanelTitle>
-          {trace.agents.map((agent, i) => (
-            <AgentRow key={agent.agent ?? "unknown"} agent={agent} totalTokens={totalTokens} last={i === trace.agents.length - 1} />
-          ))}
+          <HbarList
+            data-testid="agents-in-session"
+            rows={agentRows(trace.agents, totalTokens)}
+            maxRows={trace.agents.length}
+            rowTestId={(r: HbarRow) => `agent-row-${r.label}`}
+            emptyText="No agents in this session."
+          />
         </Panel>
 
         <Panel>
@@ -204,22 +209,22 @@ export function Drilldown({ sessionId, onBack }: DrilldownProps) {
   );
 }
 
-function AgentRow({ agent, totalTokens, last }: { agent: AgentTrace; totalTokens: number; last: boolean }) {
-  const pct = totalTokens > 0 ? Math.round((agent.tokens / totalTokens) * 100) : 0;
-  return (
-    <div data-testid={`agent-row-${agent.agent ?? "unknown"}`}>
-      <div className="agent-row">
-        <div className="agent-name">{agent.agent ?? "unknown"}</div>
-        <div className="agent-pct">
-          {pct}% · {formatCost(agent.cost)}
-          {isUnknownCost(agent.cost) && <InfoDot />}
-        </div>
-      </div>
-      <div className="agent-bar-track" style={last ? { marginBottom: 0 } : undefined}>
-        <div className="agent-bar-fill" style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
+// Feeds Drilldown's "Agents in this session" panel into HbarList (goal 5) -
+// composing the already-rebuilt component rather than a fourth hand-rolled
+// bar-chart implementation, per the build plan's note that this panel's
+// rebuild (no click-to-filter, no expand/collapse) is simpler than either
+// HbarList's or ProjectCostPanel's own. `pct` is the same
+// tokens-share-of-session calculation the deleted AgentRow used.
+function agentRows(agents: AgentTrace[], totalTokens: number): HbarRow[] {
+  return agents.map((agent) => {
+    const pct = totalTokens > 0 ? Math.round((agent.tokens / totalTokens) * 100) : 0;
+    return {
+      label: agent.agent ?? "unknown",
+      value: pct,
+      display: `${pct}% · ${formatCost(agent.cost)}`,
+      unknown: isUnknownCost(agent.cost),
+    };
+  });
 }
 
 function ChatTurn({ sessionId, turn }: { sessionId: string; turn: Turn }) {
