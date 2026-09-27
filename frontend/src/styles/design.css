@@ -266,10 +266,25 @@ table.sessions th {
   text-align: left; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--ink-faint); padding: 0 12px 10px; border-bottom: 1px solid var(--border);
 }
+table.sessions th.sortable { cursor: pointer; }
+table.sessions th.sortable:hover { color: var(--ink-soft); }
 table.sessions td { padding: 10px 12px; border-bottom: 1px solid var(--border-soft); color: var(--ink); }
 table.sessions tr:last-child td { border-bottom: none; }
 table.sessions a.sess { color: var(--add); text-decoration: none; font-weight: 600; }
 table.sessions a.sess:hover { text-decoration: underline; }
+
+/* ---- Sessions List (S1/S2): sort control group + pagination ---- */
+.sort-group { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.sort-group .sort-select {
+  position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-family: var(--sans);
+  font-size: 12.5px; font-weight: 600; color: var(--ink); border-right: 1px solid var(--border); cursor: pointer;
+}
+.sort-group .sort-select svg { width: 10px; height: 10px; stroke: var(--ink-faint); }
+.sort-group .sort-dir {
+  display: flex; align-items: center; padding: 6px 8px; background: none; border: none; cursor: pointer; color: var(--ink-soft);
+}
+.sort-group .sort-dir:hover { color: var(--ink); background: var(--panel-sunken); }
+.sort-group .sort-dir svg { width: 13px; height: 13px; }
 
 /* ---- session drilldown ---- */
 .drill-header {

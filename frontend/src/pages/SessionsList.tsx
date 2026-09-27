@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useProjects, useSessions } from "../api/hooks";
-import type { RangeKey } from "../api/types";
+import type { RangeKey, SessionSummary } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
 import { InfoDot, isUnknownCost } from "../components/InfoDot";
 import { InstallScopeRow } from "../components/InstallScopeRow";
@@ -15,19 +15,61 @@ interface SessionsListProps {
   onSelectSession: (sessionId: string) => void;
 }
 
+// S1: Session and Project aren't meaningful sort keys (an id has no order;
+// Project only matters on a system install, and even there it's not what
+// anyone means by "sort my sessions"). "started" is the default, matching
+// the table's own prior always-newest-first order.
+type SortColumn = "started" | "duration" | "tokens" | "cost";
+type SortDirection = "asc" | "desc";
+
+const SORT_COLUMNS: { value: SortColumn; label: string }[] = [
+  { value: "started", label: "Started" },
+  { value: "duration", label: "Duration" },
+  { value: "tokens", label: "Tokens" },
+  { value: "cost", label: "Cost" },
+];
+
+function sortValue(s: SessionSummary, column: SortColumn): number {
+  switch (column) {
+    case "started":
+      return new Date(s.started).getTime();
+    case "duration":
+      return new Date(s.ended).getTime() - new Date(s.started).getTime();
+    case "tokens":
+      return s.tokens;
+    case "cost":
+      // An unresolved cost sorts as the lowest value in either direction,
+      // rather than flipping to "highest" under desc - consistently out of
+      // the way instead of swapping ends depending on sort direction.
+      return s.cost ?? -Infinity;
+  }
+}
+
+function sortSessions(rows: SessionSummary[], column: SortColumn, direction: SortDirection): SessionSummary[] {
+  const sign = direction === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => sign * (sortValue(a, column) - sortValue(b, column)));
+}
+
 // pages/SessionsList.tsx per sessions-list-{loaded,error,empty}.html - its
 // own RangeControl instance (goal 1: Overview and Sessions List each own
 // one, not a page-spanning shared control), plus (F2) the same
 // InstallScopeRow Overview mounts, replacing this page's former ad-hoc
 // `.segs` project-filter pill row with the shared install-type row every
-// other screen in the revamp uses.
+// other screen in the revamp uses. S1 adds sort controls (a column
+// dropdown + direction toggle, joined into one `.sort-group`, or a column-
+// header click - both set the same state) over the already-fetched
+// `sessions.data`, entirely client-side.
 export function SessionsList({ activeTab, onTabChange, onSelectSession }: SessionsListProps) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
+  const [sortColumn, setSortColumn] = useState<SortColumn>("started");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
 
   const projects = useProjects();
   const hostTag = projects.data?.hostname ?? "localhost";
   const sessions = useSessions({ range, project: projectFilter });
+  const sorted = sortSessions(sessions.data ?? [], sortColumn, sortDirection);
 
   return (
     <div className="shell">
@@ -70,6 +112,53 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
         <div className="panel" style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
           <div className="panel-title" style={{ marginBottom: 8 }}>
             <span>{sessions.data ? `${sessions.data.length} sessions` : "…"}</span>
+            <div className="sort-group">
+              <div className="sort-select" data-testid="sort-select" onClick={() => setSortMenuOpen((o) => !o)}>
+                Sort: {SORT_COLUMNS.find((c) => c.value === sortColumn)?.label}
+                <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                {sortMenuOpen && (
+                  <div className="dropdown-menu" data-testid="sort-menu">
+                    {SORT_COLUMNS.map((c) => (
+                      <div
+                        key={c.value}
+                        className="dropdown-item"
+                        data-testid={`sort-option-${c.value}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSortColumn(c.value);
+                          setSortMenuOpen(false);
+                        }}
+                      >
+                        {c.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className="sort-dir"
+                data-testid="sort-direction"
+                title={`Sort direction: ${sortDirection === "desc" ? "Descending" : "Ascending"} (click to toggle)`}
+                onClick={() => setSortDirection((d) => (d === "desc" ? "asc" : "desc"))}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {sortDirection === "desc" ? (
+                    <>
+                      <path d="M12 5v14" />
+                      <polyline points="19 12 12 19 5 12" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M12 19V5" />
+                      <polyline points="5 12 12 5 19 12" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            </div>
           </div>
           <div className="table-wrap">
             <table className="sessions" data-testid="sessions-table">
@@ -77,14 +166,20 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                 <tr>
                   <th>Session</th>
                   <th>Project</th>
-                  <th>Started</th>
-                  <th>Duration</th>
-                  <th>Tokens</th>
-                  <th>Cost</th>
+                  {SORT_COLUMNS.map((c) => (
+                    <th
+                      key={c.value}
+                      className="sortable"
+                      data-testid={`sort-header-${c.value}`}
+                      onClick={() => setSortColumn(c.value)}
+                    >
+                      {c.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {(sessions.data ?? []).map((s) => (
+                {sorted.map((s) => (
                   <tr key={s.session_id} data-testid={`session-row-${s.session_id}`}>
                     <td>
                       <a className="sess" href={`/sessions/${encodeURIComponent(s.session_id)}`} onClick={(e) => {
