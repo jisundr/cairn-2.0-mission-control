@@ -129,20 +129,13 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .chart-tooltip-row { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-soft); }
 .chart-tooltip-row + .chart-tooltip-row { margin-top: 2px; }
 
-/* ---- hbar list ---- */
-.hbar-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
-.hbar-row:last-child { border-bottom: none; }
-.hbar-row.clickable { cursor: pointer; border-radius: 5px; margin: 0 -8px; padding: 7px 8px; }
-.hbar-row.clickable:hover { background: var(--panel-sunken); }
-.hbar-row.selected { background: var(--add-bg); }
-.hbar-row.selected:hover { background: var(--add-bg); }
+/* ---- hbar list (row-level styling now lives inline in each Recharts
+   `shape`/`tick` renderer - HbarList.tsx, TruncatedAxisTick.tsx,
+   ProjectCostPanel.tsx - since goal 6 needs per-row layout math no static
+   class can express) ---- */
 .hbar-sign { width: 1ch; flex-shrink: 0; font-family: var(--mono); font-weight: 700; text-align: center; color: var(--ink-faint); }
 .hbar-sign.add { color: var(--add); }
-.hbar-label { width: 128px; flex-shrink: 0; font-family: var(--mono); font-size: 12px; color: var(--ink); white-space: nowrap; }
 .hbar-scope { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
-.hbar-track { flex: 1; height: 7px; background: var(--border-soft); border-radius: 4px; overflow: hidden; }
-.hbar-fill { height: 100%; background: var(--ink-soft); border-radius: 4px; }
-.hbar-fill.selected { background: var(--add); }
 .hbar-value { width: 58px; flex-shrink: 0; text-align: right; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink); }
 
 .filter-chip {

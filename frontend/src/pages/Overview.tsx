@@ -231,7 +231,10 @@ function OverviewLoaded({
           </Panel>
 
           <Panel err={toolRollup.isError} style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
-            <PanelTitle err={toolRollup.isError}>By tool</PanelTitle>
+            <PanelTitle err={toolRollup.isError}>
+              By tool
+              <InfoDot title="Number of calls that used each tool in the current range" />
+            </PanelTitle>
             {toolRollup.isError ? (
               <div className="err-inline">
                 <PanelError message="Couldn't load — request failed" onRetry={() => toolRollup.refetch()} testId="by-tool-error" />
@@ -254,7 +257,10 @@ function OverviewLoaded({
           />
 
           <Panel err={agentRollup.isError}>
-            <PanelTitle err={agentRollup.isError}>By agent</PanelTitle>
+            <PanelTitle err={agentRollup.isError}>
+              By agent
+              <InfoDot title="Share of tokens in the current range" />
+            </PanelTitle>
             {agentRollup.isError ? (
               <div className="err-inline">
                 <PanelError message="Couldn't load — request failed" onRetry={() => agentRollup.refetch()} testId="by-agent-error" />
@@ -269,7 +275,10 @@ function OverviewLoaded({
           </Panel>
 
           <Panel err={modelRollup.isError}>
-            <PanelTitle err={modelRollup.isError}>By model</PanelTitle>
+            <PanelTitle err={modelRollup.isError}>
+              By model
+              <InfoDot title="Share of tokens in the current range" />
+            </PanelTitle>
             {modelRollup.isError ? (
               <div className="err-inline">
                 <PanelError message="Couldn't load — request failed" onRetry={() => modelRollup.refetch()} testId="by-model-error" />
