@@ -540,6 +540,55 @@ def test_empty_known_projects_file_means_project_scope_only(tmp_path):
     assert [p.label for p in app.projects()] == ["solo-project"]
 
 
+def test_discover_projects_groups_a_known_root_under_its_containing_known_root(tmp_path):
+    parent_root = tmp_path / "ai-worth-carrying"
+    engine_root = parent_root / "engine"
+    site_root = parent_root / "site"
+    parent_root.mkdir()
+    engine_root.mkdir()
+    site_root.mkdir()
+
+    known_projects_path = tmp_path / "known-projects.json"
+    known_projects_path.write_text(json.dumps([str(engine_root), str(site_root)]))
+
+    projects = server.discover_projects(parent_root, known_projects_path)
+    by_label = {p.label: p for p in projects}
+
+    assert by_label["ai-worth-carrying"].parent is None
+    assert by_label["engine"].parent == "ai-worth-carrying"
+    assert by_label["site"].parent == "ai-worth-carrying"
+
+
+def test_discover_projects_picks_the_nearest_containing_root_when_more_than_one_matches(tmp_path):
+    grandparent = tmp_path / "org"
+    parent = grandparent / "team"
+    child = parent / "service"
+    grandparent.mkdir()
+    parent.mkdir(parents=True)
+    child.mkdir()
+
+    known_projects_path = tmp_path / "known-projects.json"
+    known_projects_path.write_text(json.dumps([str(grandparent), str(parent)]))
+
+    projects = server.discover_projects(child, known_projects_path)
+    by_label = {p.label: p for p in projects}
+
+    assert by_label["service"].parent == "team"
+
+
+def test_discover_projects_unrelated_roots_have_no_parent(tmp_path):
+    root_a = tmp_path / "project-a"
+    root_b = tmp_path / "project-b"
+    root_a.mkdir()
+    root_b.mkdir()
+
+    known_projects_path = tmp_path / "known-projects.json"
+    known_projects_path.write_text(json.dumps([str(root_b)]))
+
+    projects = server.discover_projects(root_a, known_projects_path)
+    assert all(p.parent is None for p in projects)
+
+
 def test_handle_api_projects_reports_the_system_hostname_and_each_projects_parent(tmp_path, monkeypatch):
     monkeypatch.setattr(server.socket, "gethostname", lambda: "my-laptop")
     root = make_project(tmp_path, "solo-project")

@@ -104,6 +104,26 @@ def _disambiguate_labels(roots: list[Path]) -> list[str]:
     return labels
 
 
+def _compute_parents(roots: list[Path], labels: list[str]) -> list[str | None]:
+    """Each root's parent label (goal 8): root `r`'s parent is the *other*
+    known root `p` such that `r` is a filesystem subdirectory of `p`,
+    picking the longest-path (nearest/most specific) match when more than
+    one known root contains `r` - e.g. `engine`/`site` under
+    `ai-worth-carrying`. `None` when no other known root contains `r`.
+    Compares only the already-resolved `roots` list - no filesystem scan
+    beyond what `discover_projects` already loaded.
+    """
+    parents: list[str | None] = []
+    for i, r in enumerate(roots):
+        containing = [j for j, p in enumerate(roots) if j != i and r != p and r.is_relative_to(p)]
+        if not containing:
+            parents.append(None)
+            continue
+        nearest = max(containing, key=lambda j: len(roots[j].parts))
+        parents.append(labels[nearest])
+    return parents
+
+
 def discover_projects(local_root: Path, known_projects_path: Path | None = None) -> list[Project]:
     """This project, plus every other project path listed in
     `known-projects.json`, when that file exists and is non-empty. Absent
@@ -140,7 +160,9 @@ def discover_projects(local_root: Path, known_projects_path: Path | None = None)
                     seen.add(other_root)
                     roots.append(other_root)
 
-    return [Project(label=label, root=root) for label, root in zip(_disambiguate_labels(roots), roots)]
+    labels = _disambiguate_labels(roots)
+    parents = _compute_parents(roots, labels)
+    return [Project(label=label, root=root, parent=parent) for label, root, parent in zip(labels, roots, parents)]
 
 
 def write_known_projects(path: Path, roots: list[Path]) -> None:
