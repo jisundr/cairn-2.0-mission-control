@@ -212,8 +212,6 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .drill-cost { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--ink); }
 .drill-grid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
 
-.agent-cost { text-align: right; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: -12px 0 14px; }
-
 /* Goal 7: looser spacing (gap/padding/line-height) plus a third, visually
    distinct background per call kind - prompt keeps the plain panel card,
    response gets a tinted add-bg card (previously indistinguishable from a
