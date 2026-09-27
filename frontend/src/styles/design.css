@@ -180,6 +180,21 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .filter-chip .plus svg { width: 12px; height: 12px; stroke: var(--add-line); }
 @keyframes flash { 0% { transform: scale(1.6); } 100% { transform: scale(1); } }
 
+/* ---- stacked-bar panels (F5): By models / By tools / By agents / By
+   project - a GitHub-language-bar-style proportional segmented bar plus a
+   legend, on the same 3-tier ink/ink-soft/ink-faint monochrome scale the
+   rest of the app already uses for hierarchy. ---- */
+.stackbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--border-soft); }
+.stackbar .seg { height: 100%; }
+.stack-legend { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.stack-legend .item { display: flex; align-items: center; gap: 8px; }
+.stack-legend .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.stack-legend .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--ink); }
+.stack-legend .val { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.tier-1 { background: var(--ink); }
+.tier-2 { background: var(--ink-soft); }
+.tier-3 { background: var(--ink-faint); }
+
 .btn-block {
   display: block; width: 100%; text-align: center; margin-top: 10px;
   font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--ink);
