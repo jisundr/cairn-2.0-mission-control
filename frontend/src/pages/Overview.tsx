@@ -1,6 +1,15 @@
-import { useState } from "react";
-import { useAgentRollup, useModelRollup, useProjects, useSessions, useTimeseries, useToolRollup, useUsageLimitEvents } from "../api/hooks";
-import type { ProjectSummary, RangeKey } from "../api/types";
+import { useEffect, useState } from "react";
+import {
+  useAgentRollup,
+  useDayDetail,
+  useModelRollup,
+  useProjects,
+  useSessions,
+  useTimeseries,
+  useToolRollup,
+  useUsageLimitEvents,
+} from "../api/hooks";
+import type { ProjectSummary, RangeKey, SessionSummary } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
 import { ContributionCalendar } from "../components/ContributionCalendar";
 import { InstallScopeRow } from "../components/InstallScopeRow";
@@ -23,6 +32,17 @@ type OverviewView = "trend" | "calendar";
 
 const VIEW_RANGE: Record<OverviewView, RangeKey> = { trend: "30d", calendar: "13w" };
 const VIEW_LABEL: Record<OverviewView, string> = { trend: "Last 30 days", calendar: "Last 13 weeks" };
+
+// O2: a session "falls on" a selected day if its [started, ended) window
+// overlaps that UTC calendar day at all - a session spanning midnight
+// counts on both days it touches, rather than only the day it started.
+// ISO8601 timestamps (all `Z`-suffixed, same format) compare correctly as
+// plain strings, so this needs no Date parsing.
+function sessionOverlapsDate(session: SessionSummary, date: string): boolean {
+  const dayStart = `${date}T00:00:00Z`;
+  const dayEnd = `${date}T23:59:59.999Z`;
+  return session.started <= dayEnd && session.ended >= dayStart;
+}
 
 interface OverviewProps {
   activeTab: AppTab;
@@ -134,6 +154,15 @@ function OverviewLoaded({
   const modelRollup = useModelRollup({ range, project: projectFilter });
   const usageLimitEvents = useUsageLimitEvents({ range: "7d", project: projectFilter });
 
+  // O2: click-to-drill-into-a-day. Reset whenever the view or project
+  // filter changes - a selected date from a 30-day Trend window has no
+  // meaning once the window itself changes shape (13w) or scope.
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedDate(null);
+  }, [view, projectFilter]);
+  const dayDetail = useDayDetail(selectedDate, projectFilter);
+
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   function handleRefresh() {
@@ -144,12 +173,17 @@ function OverviewLoaded({
     agentRollup.refetch();
     modelRollup.refetch();
     usageLimitEvents.refetch();
+    if (selectedDate) dayDetail.refetch();
     setLastUpdated(new Date());
   }
 
-  const totalCost = timeseries.data?.total_cost ?? null;
-  const totalTokens = timeseries.data?.total_tokens ?? null;
-  const sessionCount = sessionsFiltered.data?.length ?? null;
+  const totalCost = selectedDate ? dayDetail.data?.total_cost ?? null : timeseries.data?.total_cost ?? null;
+  const totalTokens = selectedDate ? dayDetail.data?.total_tokens ?? null : timeseries.data?.total_tokens ?? null;
+  const totalsLoaded = selectedDate ? Boolean(dayDetail.data) : Boolean(timeseries.data);
+  const sessionCount = selectedDate
+    ? sessionsFiltered.data?.filter((s) => sessionOverlapsDate(s, selectedDate)).length ?? null
+    : sessionsFiltered.data?.length ?? null;
+  const breakdownLabel = selectedDate ? `${selectedDate} · ${VIEW_LABEL[view]}` : VIEW_LABEL[view];
 
   return (
     <div className="shell">
@@ -197,9 +231,14 @@ function OverviewLoaded({
             </div>
           ) : timeseries.data ? (
             view === "trend" ? (
-              <TokensPerDayChart timeseries={timeseries.data} project={projectFilter} />
+              <TokensPerDayChart
+                timeseries={timeseries.data}
+                project={projectFilter}
+                selectedDate={selectedDate}
+                onSelectDate={setSelectedDate}
+              />
             ) : (
-              <ContributionCalendar points={timeseries.data.points} selectedDate={null} onSelectDate={() => {}} />
+              <ContributionCalendar points={timeseries.data.points} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
             )
           ) : (
             <div className="skel" style={{ height: 150 }} />
@@ -210,17 +249,17 @@ function OverviewLoaded({
           <div className="trend-panel-head">
             <PanelTitle style={{ margin: 0 }}>Breakdown</PanelTitle>
             <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
-              {VIEW_LABEL[view]}
+              {breakdownLabel}
             </span>
           </div>
           <div className="kv-list" data-testid="breakdown">
             <div className="kv-row" data-testid="breakdown-cost">
               <span className="name">Cost</span>
-              <span className="val">{timeseries.data ? formatCost(totalCost) : "…"}</span>
+              <span className="val">{totalsLoaded ? formatCost(totalCost) : "…"}</span>
             </div>
             <div className="kv-row" data-testid="breakdown-tokens">
               <span className="name">Tokens</span>
-              <span className="val">{totalTokens !== null ? formatTokens(totalTokens) : "…"}</span>
+              <span className="val">{totalsLoaded && totalTokens !== null ? formatTokens(totalTokens) : "…"}</span>
             </div>
             <div className="kv-row" data-testid="breakdown-sessions">
               <span className="name">Sessions</span>

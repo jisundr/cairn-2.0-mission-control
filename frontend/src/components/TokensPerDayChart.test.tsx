@@ -1,5 +1,5 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { Timeseries } from "../api/types";
 import { installFetchMock } from "../test/mockApi";
 import { renderWithClient } from "../test/renderWithClient";
@@ -26,5 +26,24 @@ describe("TokensPerDayChart", () => {
     expect(screen.getByTestId("chart-bars")).toBeInTheDocument();
     const ticks = container.querySelectorAll(".recharts-cartesian-axis-tick-value");
     expect([...ticks].map((t) => t.textContent)).toEqual(["09-24", "09-25"]);
+  });
+
+  // O2: click-to-drill-into-a-day.
+  it("O2: reports a clicked bar's date, toggling off on a repeat click of the selected bar", () => {
+    installFetchMock({});
+    const onSelectDate = vi.fn();
+    renderWithClient(<TokensPerDayChart timeseries={TIMESERIES} selectedDate={null} onSelectDate={onSelectDate} />);
+
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-24"));
+    expect(onSelectDate).toHaveBeenCalledWith("2026-09-24");
+  });
+
+  it("O2: clicking the already-selected bar clears the selection", () => {
+    installFetchMock({});
+    const onSelectDate = vi.fn();
+    renderWithClient(<TokensPerDayChart timeseries={TIMESERIES} selectedDate="2026-09-24" onSelectDate={onSelectDate} />);
+
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-24"));
+    expect(onSelectDate).toHaveBeenCalledWith(null);
   });
 });

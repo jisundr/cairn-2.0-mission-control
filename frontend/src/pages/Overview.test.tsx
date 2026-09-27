@@ -61,6 +61,16 @@ function baseHandlers(overrides: Record<string, ReturnType<typeof envelope> | { 
     "/api/rollup/tool": () => overrides["/api/rollup/tool"] ?? envelope([{ key: "Edit", count: 12 }]),
     "/api/rollup/agent": () => overrides["/api/rollup/agent"] ?? envelope([{ key: "builder", calls: 12, tokens: 184204, cost: 12.4 }]),
     "/api/rollup/model": () => overrides["/api/rollup/model"] ?? envelope([{ key: "sonnet-5", calls: 12, tokens: 184204, cost: 12.4 }]),
+    "/api/rollup/day-detail": () =>
+      overrides["/api/rollup/day-detail"] ??
+      envelope({
+        date: "2026-09-25",
+        total_tokens: 184204,
+        total_cost: 12.4,
+        by_model: [{ key: "sonnet-5", calls: 12, tokens: 184204, cost: 12.4 }],
+        by_tool: [{ key: "Edit", count: 12 }],
+        by_agent: [{ key: "builder", calls: 12, tokens: 184204, cost: 12.4 }],
+      }),
     "/api/usage-limit-events": () => overrides["/api/usage-limit-events"] ?? envelope([]),
   };
 }
@@ -116,6 +126,33 @@ describe("Overview", () => {
       expect(urls.some((u) => u.includes("/api/rollup/agent") && u.includes("range=13w"))).toBe(true);
     });
     expect(await screen.findByTestId("contribution-calendar")).toBeInTheDocument();
+  });
+
+  it("O2: clicking a bar drills the Breakdown into that day, and a repeat click clears it", async () => {
+    installFetchMock(baseHandlers());
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
+
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$12.40"));
+    // Sole seeded session overlaps 2026-09-25 - still counted on drill-in.
+    expect(screen.getByTestId("breakdown-sessions")).toHaveTextContent("1");
+
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
+  });
+
+  it("O2: switching views clears the selected day", async () => {
+    installFetchMock(baseHandlers());
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$12.40"));
+
+    fireEvent.click(screen.getByTestId("view-seg-calendar"));
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
   });
 
   it("shows PanelError with a working retry when the Trend chart's timeseries fails", async () => {

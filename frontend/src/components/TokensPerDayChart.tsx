@@ -1,21 +1,37 @@
 import { useState } from "react";
-import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useDayDetail } from "../api/hooks";
 import type { Timeseries, TimeseriesPoint } from "../api/types";
 import { formatCost, formatDayLabel, formatTokens } from "../lib/format";
 import { isUnknownCost } from "./InfoDot";
 
+interface TokensPerDayChartProps {
+  timeseries: Timeseries;
+  project?: string;
+  // O2: click-to-drill-into-a-day. Both optional - a caller that never
+  // passes them (none currently do) gets the plain hover-tooltip chart
+  // this component always was, no click behavior added.
+  selectedDate?: string | null;
+  onSelectDate?: (date: string | null) => void;
+}
+
 // `.chart-bars` per overview-loaded.html, rebuilt on Recharts (goal 3) - one
-// bar per `Timeseries` point. The most recent bucket keeps the mockup's
-// `.bar.today` treatment (a distinct fill), now via a per-point `<Cell>`
-// rather than a CSS class. Hovering a bar calls `useDayDetail` (its first
-// caller anywhere in this app) for that bucket's per-model breakdown,
-// rendered in a custom tooltip so it never clips/overflows the panel like
-// the native `title` attribute it replaces did.
-export function TokensPerDayChart({ timeseries, project }: { timeseries: Timeseries; project?: string }) {
+// bar per `Timeseries` point, drawn via a custom `Bar` `shape` (`DayBar`
+// below) rather than Recharts' deprecated `<Cell>` - the same convention
+// HbarList/ProjectCostPanel/ActivityHeatmap already use for a clickable or
+// test-id-bearing bar/cell, and the only way to get a click handler + a
+// discoverable `data-testid` onto the actual rendered element (`<Cell>`
+// doesn't forward either). The most recent bucket keeps the mockup's
+// `.bar.today` treatment; a selected bucket (O2) gets `--add` instead.
+// Hovering a bar calls `useDayDetail` (its first caller anywhere in this
+// app) for that bucket's per-model breakdown, rendered in a custom tooltip.
+// Clicking a bar reports its date via `onSelectDate`, toggling off on a
+// repeat click of the already-selected bar.
+export function TokensPerDayChart({ timeseries, project, selectedDate, onSelectDate }: TokensPerDayChartProps) {
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const dayDetail = useDayDetail(hoveredDate, project);
   const points = timeseries.points;
+  const lastBucket = points[points.length - 1]?.bucket;
 
   return (
     <div data-testid="chart-bars" style={{ width: "100%", height: 150 }}>
@@ -45,14 +61,48 @@ export function TokensPerDayChart({ timeseries, project }: { timeseries: Timeser
               return <DayTooltip point={point} bucketLabel={tickLabel(timeseries.bucket, point.bucket)} dayDetail={dayDetail.data} />;
             }}
           />
-          <Bar dataKey="tokens" radius={[2, 2, 0, 0]} maxBarSize={30}>
-            {points.map((p, i) => (
-              <Cell key={p.bucket} fill={i === points.length - 1 ? "var(--ink-soft)" : "var(--border-soft)"} />
-            ))}
-          </Bar>
+          <Bar
+            dataKey="tokens"
+            isAnimationActive={false}
+            maxBarSize={30}
+            shape={(props: unknown) => (
+              <DayBar {...(props as DayBarShapeProps)} lastBucket={lastBucket} selectedDate={selectedDate} onSelectDate={onSelectDate} />
+            )}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
+  );
+}
+
+interface DayBarShapeProps {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  payload: TimeseriesPoint;
+  lastBucket: string | undefined;
+  selectedDate: string | null | undefined;
+  onSelectDate: ((date: string | null) => void) | undefined;
+}
+
+function DayBar({ x, y, width, height, payload: point, lastBucket, selectedDate, onSelectDate }: DayBarShapeProps) {
+  const date = bucketDate(point.bucket);
+  const selected = date === selectedDate;
+  const fill = selected ? "var(--add)" : point.bucket === lastBucket ? "var(--ink-soft)" : "var(--border-soft)";
+
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={Math.max(width, 1)}
+      height={Math.max(height, 0)}
+      rx={2}
+      fill={fill}
+      style={{ cursor: onSelectDate ? "pointer" : undefined }}
+      data-testid={`chart-bar-${date}`}
+      onClick={onSelectDate ? () => onSelectDate(selected ? null : date) : undefined}
+    />
   );
 }
 
