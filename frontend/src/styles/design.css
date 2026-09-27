@@ -119,12 +119,15 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 }
 .panel-title.err { color: var(--remove); }
 
-/* ---- bar chart ---- */
-.chart-bars { display: flex; align-items: flex-end; gap: 8px; height: 150px; }
-.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
-.bar { width: 100%; max-width: 30px; background: var(--border-soft); border-radius: 2px 2px 0 0; }
-.bar.today { background: var(--ink-soft); }
-.bar-day { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
+/* ---- chart tooltip (shared by every Recharts panel: TokensPerDayChart,
+   ActivityHeatmap, HbarList, ProjectCostPanel) ---- */
+.chart-tooltip {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font-size: 11.5px; color: var(--ink); max-width: 220px;
+}
+.chart-tooltip-title { font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+.chart-tooltip-row { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-soft); }
+.chart-tooltip-row + .chart-tooltip-row { margin-top: 2px; }
 
 /* ---- heatmap ---- */
 .heatmap { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }

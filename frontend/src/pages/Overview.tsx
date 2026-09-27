@@ -211,7 +211,7 @@ function OverviewLoaded({
                 <PanelError message="Couldn't load — request failed" onRetry={() => rangeTimeseries.refetch()} testId="chart-error" />
               </div>
             ) : rangeTimeseries.data ? (
-              <TokensPerDayChart timeseries={rangeTimeseries.data} />
+              <TokensPerDayChart timeseries={rangeTimeseries.data} project={projectFilter} />
             ) : (
               <div className="skel" style={{ height: 150 }} />
             )}
