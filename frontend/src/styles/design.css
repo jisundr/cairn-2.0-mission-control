@@ -69,6 +69,10 @@ nav.app-tabs a {
 }
 nav.app-tabs a.active { color: var(--ink); border-bottom-color: var(--add-line); }
 nav.app-tabs a:hover:not(.active) { color: var(--ink); }
+/* F3: collapsed-nav trigger, hidden until the 900px breakpoint below swaps
+   it in for nav.app-tabs - must win over .dropdown-btn's own
+   display:inline-flex at equal specificity. */
+.dropdown-btn.nav-dropdown { display: none; }
 
 .app-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--add); flex-shrink: 0; }
@@ -282,4 +286,7 @@ table.sessions a.sess:hover { text-decoration: underline; }
   .shell { padding: 16px 16px 36px; }
   header.app { gap: 12px; }
   .app-right { width: 100%; justify-content: space-between; }
+  .wordmark .sub { display: none; }
+  nav.app-tabs { display: none; }
+  .dropdown-btn.nav-dropdown { display: flex; }
 }
