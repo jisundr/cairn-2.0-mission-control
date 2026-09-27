@@ -286,6 +286,15 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .sort-group .sort-dir:hover { color: var(--ink); background: var(--panel-sunken); }
 .sort-group .sort-dir svg { width: 13px; height: 13px; }
 
+.pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.pagination .pg-count { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+.pg-btn {
+  font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--ink);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; background: var(--panel); cursor: pointer;
+}
+.pg-btn:disabled { color: var(--border); cursor: default; border-color: var(--border-soft); }
+.pg-btn:not(:disabled):hover { border-color: var(--ink-soft); background: var(--panel-sunken); }
+
 /* ---- session drilldown ---- */
 .drill-header {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;

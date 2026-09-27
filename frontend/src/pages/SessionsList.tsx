@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProjects, useSessions } from "../api/hooks";
 import type { RangeKey, SessionSummary } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
@@ -50,6 +50,13 @@ function sortSessions(rows: SessionSummary[], column: SortColumn, direction: Sor
   return [...rows].sort((a, b) => sign * (sortValue(a, column) - sortValue(b, column)));
 }
 
+// S2: Prev/Next only, no jump-to-page - a client-side slice of the
+// already-fully-fetched, already-sorted array (per PLAN.md's Risks note:
+// fine at this app's local single-user SQLite scale, would need revisiting
+// if session counts grow well past what one /api/rollup/session call
+// comfortably returns).
+const PAGE_SIZE = 25;
+
 // pages/SessionsList.tsx per sessions-list-{loaded,error,empty}.html - its
 // own RangeControl instance (goal 1: Overview and Sessions List each own
 // one, not a page-spanning shared control), plus (F2) the same
@@ -58,18 +65,30 @@ function sortSessions(rows: SessionSummary[], column: SortColumn, direction: Sor
 // other screen in the revamp uses. S1 adds sort controls (a column
 // dropdown + direction toggle, joined into one `.sort-group`, or a column-
 // header click - both set the same state) over the already-fetched
-// `sessions.data`, entirely client-side.
+// `sessions.data`, entirely client-side. S2 adds Prev/Next pagination over
+// that same sorted array (resetting to page 1 on range/project/sort
+// change) and drops the redundant Project column on a single-project
+// install, where every row is already the same project.
 export function SessionsList({ activeTab, onTabChange, onSelectSession }: SessionsListProps) {
   const [range, setRange] = useState<RangeKey>("7d");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
   const [sortColumn, setSortColumn] = useState<SortColumn>("started");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const projects = useProjects();
   const hostTag = projects.data?.hostname ?? "localhost";
+  const multiProject = (projects.data?.projects.length ?? 0) > 1;
   const sessions = useSessions({ range, project: projectFilter });
   const sorted = sortSessions(sessions.data ?? [], sortColumn, sortDirection);
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const pageRows = sorted.slice(pageStart, pageStart + PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [range, projectFilter, sortColumn, sortDirection]);
 
   return (
     <div className="shell">
@@ -165,7 +184,7 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
               <thead>
                 <tr>
                   <th>Session</th>
-                  <th>Project</th>
+                  {multiProject && <th>Project</th>}
                   {SORT_COLUMNS.map((c) => (
                     <th
                       key={c.value}
@@ -179,7 +198,7 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((s) => (
+                {pageRows.map((s) => (
                   <tr key={s.session_id} data-testid={`session-row-${s.session_id}`}>
                     <td>
                       <a className="sess" href={`/sessions/${encodeURIComponent(s.session_id)}`} onClick={(e) => {
@@ -189,7 +208,7 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                         {s.label || shortId(s.session_id)}
                       </a>
                     </td>
-                    <td>{s.project}</td>
+                    {multiProject && <td>{s.project}</td>}
                     <td>{formatStarted(s.started)}</td>
                     <td>{formatSessionDuration(s.started, s.ended)}</td>
                     <td>{s.tokens.toLocaleString()}</td>
@@ -201,6 +220,31 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="pagination">
+            <span className="pg-count" data-testid="pagination-count">
+              Showing {sorted.length === 0 ? 0 : pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, sorted.length)} of {sorted.length}
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                className="pg-btn"
+                data-testid="pagination-prev"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                className="pg-btn"
+                data-testid="pagination-next"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       )}

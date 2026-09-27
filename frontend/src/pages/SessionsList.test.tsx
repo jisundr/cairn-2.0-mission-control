@@ -48,11 +48,50 @@ describe("SessionsList", () => {
     const onSelectSession = vi.fn();
     renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={onSelectSession} />);
 
-    await waitFor(() => expect(screen.getByTestId("sessions-table")).toHaveTextContent("cairn-2.0"));
-    expect(screen.getByText("$12.40")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("sessions-table")).toHaveTextContent("$12.40"));
+    // S2: single-project install - the redundant Project column is dropped.
+    expect(screen.getByTestId("sessions-table")).not.toHaveTextContent("cairn-2.0");
 
     fireEvent.click(screen.getByText("a8de42…c884"));
     expect(onSelectSession).toHaveBeenCalledWith(SESSION.session_id);
+  });
+
+  // S2: pagination.
+  it("S2: paginates at 25 rows, Prev disabled on page 1, Next advances the page", async () => {
+    const sessions: SessionSummary[] = Array.from({ length: 30 }, (_, i) => ({
+      ...SESSION,
+      session_id: `session-${i}`,
+      started: new Date(Date.UTC(2026, 8, 25 - i)).toISOString(),
+      ended: new Date(Date.UTC(2026, 8, 25 - i, 0, 30)).toISOString(),
+    }));
+    install({ "/api/rollup/session": envelope(sessions) });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getAllByTestId(/^session-row-/)).toHaveLength(25));
+    expect(screen.getByTestId("pagination-count")).toHaveTextContent("Showing 1–25 of 30");
+    expect(screen.getByTestId("pagination-prev")).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId("pagination-next"));
+    expect(screen.getAllByTestId(/^session-row-/)).toHaveLength(5);
+    expect(screen.getByTestId("pagination-count")).toHaveTextContent("Showing 26–30 of 30");
+    expect(screen.getByTestId("pagination-next")).toBeDisabled();
+  });
+
+  it("S2: shows the Project column only on a multi-project (system) install", async () => {
+    installFetchMock({
+      "/api/projects": () =>
+        envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "cairn-2.0", parent: null },
+            { label: "wardstone", parent: null },
+          ],
+        }),
+      "/api/rollup/session": () => envelope([SESSION]),
+    });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("sessions-table")).toHaveTextContent("cairn-2.0"));
   });
 
   it("shows PanelError with a working retry when the sessions fetch fails", async () => {
