@@ -214,14 +214,21 @@ table.sessions a.sess:hover { text-decoration: underline; }
 
 .agent-cost { text-align: right; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin: -12px 0 14px; }
 
-.transcript { display: flex; flex-direction: column; gap: 10px; }
-.bubble { max-width: 72%; padding: 9px 13px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; }
+/* Goal 7: looser spacing (gap/padding/line-height) plus a third, visually
+   distinct background per call kind - prompt keeps the plain panel card,
+   response gets a tinted add-bg card (previously indistinguishable from a
+   toolcall's own panel-sunken background at a glance), and toolcall keeps
+   panel-sunken but swaps its all-around dashed border for a left accent
+   border and a centered, near-full-width layout - a "system event" read
+   distinct from either chat bubble's own left/right alignment. */
+.transcript { display: flex; flex-direction: column; gap: 14px; }
+.bubble { max-width: 74%; padding: 11px 15px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; }
 .bubble.prompt { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
-.bubble.response { align-self: flex-end; background: var(--panel-sunken); }
+.bubble.response { align-self: flex-end; background: var(--add-bg); border: 1px solid var(--border-soft); }
 .toolcall {
-  align-self: flex-end; display: flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 6px;
-  background: var(--panel-sunken); border: 1px dashed var(--border); font-family: var(--mono); font-size: 10.5px;
-  color: var(--ink-soft); max-width: 72%;
+  align-self: center; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 6px;
+  background: var(--panel-sunken); border-left: 3px solid var(--ink-faint); font-family: var(--mono); font-size: 10.5px;
+  color: var(--ink-soft); max-width: 82%;
 }
 .toolcall .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
 .toolcall b { color: var(--ink); font-weight: 700; }
