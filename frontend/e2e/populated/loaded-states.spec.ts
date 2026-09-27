@@ -57,7 +57,11 @@ test.describe("populated loaded states", () => {
 
     await page.goto("/sessions/e2e-session-main");
 
-    await expect(page.getByText(SESSION_MAIN_LABEL)).toBeVisible();
+    // Scoped to the drill header, not a bare getByText(SESSION_MAIN_LABEL) -
+    // the transcript's first prompt bubble renders the same text (see
+    // fixtures/seed.py), so an unscoped substring match hits both and trips
+    // Playwright's strict-mode violation.
+    await expect(page.locator(".drill-title")).toContainText(SESSION_MAIN_LABEL);
     await expect(page.getByTestId("agent-row-main")).toBeVisible();
     await expect(page.getByTestId("agent-row-builder")).toBeVisible();
     await expect(page.getByTestId("agent-row-reviewer")).toBeVisible();
