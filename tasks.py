@@ -289,14 +289,33 @@ _APPROVAL_SUBSTRINGS = ("awaiting requirements approval", "awaiting plan approva
 
 
 def _needs_attention_fact(key_info: str) -> bool:
-    """Case-sensitive substring match, verbatim from `/cairn-triage` step 3
-    - `needs-human`/`stalled` (an unattended-mode marker) or either
-    approval-gate string (`cairn:shared`'s own convention)."""
+    """Case-sensitive substring match on `needs-human`/`stalled` (an
+    unattended-mode marker). An approval-gate string no longer counts: it
+    has its own stage column (`awaiting_approval`)."""
     if not key_info:
         return False
-    return any(s in key_info for s in _NEEDS_ATTENTION_SUBSTRINGS) or any(
-        s in key_info for s in _APPROVAL_SUBSTRINGS
-    )
+    return any(s in key_info for s in _NEEDS_ATTENTION_SUBSTRINGS)
+
+
+def _awaiting_approval_fact(key_info: str) -> bool:
+    """Case-sensitive substring match on either approval-gate string."""
+    if not key_info:
+        return False
+    return any(s in key_info for s in _APPROVAL_SUBSTRINGS)
+
+
+_REVIEW_WORD_RE = re.compile(r"\b(review|reviewer)\b", re.IGNORECASE)
+
+
+def _in_review_fact(key_info: str) -> bool:
+    """Heuristic: `key_info` names review as a whole word."""
+    return bool(_REVIEW_WORD_RE.search(key_info or ""))
+
+
+def _plan_merely_approved(key_info: str) -> bool:
+    """`cairn:shared` overwrites `key_info` with `approved` plus the next
+    step on approval, so a leading `approved` reads as not yet started."""
+    return (key_info or "").strip().lower().startswith("approved")
 
 
 _DONE_WORD_RE = re.compile(r"\b(done|close|closed|complete)\b", re.IGNORECASE)
@@ -374,16 +393,21 @@ def _done_fact(kind: str, key_info: str, folder_name: str, project_root: Path, g
     return bool(merged) or key_info_says_done
 
 
-def _column(needs_attention: bool, done: bool, active: bool) -> str:
-    """First-match-wins, per §6.2: Needs Attention -> Done -> Ongoing ->
-    Ready."""
-    if needs_attention:
-        return "needs_attention"
+def _column(*, kind: str, key_info: str, has_plan: bool, done: bool, active: bool) -> str:
+    """First-match-wins lifecycle stage: done -> awaiting_approval ->
+    scoping (research kind, or no PLAN.md) -> in_review -> building (active,
+    or a plan not merely approved) -> planned."""
     if done:
         return "done"
-    if active:
-        return "ongoing"
-    return "ready"
+    if _awaiting_approval_fact(key_info):
+        return "awaiting_approval"
+    if kind == "research" or not has_plan:
+        return "scoping"
+    if _in_review_fact(key_info):
+        return "in_review"
+    if active or not _plan_merely_approved(key_info):
+        return "building"
+    return "planned"
 
 
 # --------------------------------------------------------------------------
@@ -463,6 +487,7 @@ def _card_fields(
     needs_attention = _needs_attention_fact(key_info)
     done = _done_fact(kind, key_info, folder_dir.name, project.root, gh_cache, gh_ttl)
     active = (str(project.root), relative_folder) in live_heartbeats
+    has_plan = (folder_dir / "PLAN.md").is_file()
 
     return {
         "project": project.label,
@@ -472,7 +497,7 @@ def _card_fields(
         "goal": goal,
         "key_info": key_info,
         "last_log_date": last_log_date,
-        "column": _column(needs_attention, done, active),
+        "column": _column(kind=kind, key_info=key_info, has_plan=has_plan, done=done, active=active),
         "active": active,
         "needs_attention": needs_attention,
         "done": done,
@@ -617,7 +642,15 @@ def build_detail(
         for child_dir, child_source in children:
             child_card = _card_fields(child_dir, child_source, project, tasks_root, live_heartbeats, gh_cache, gh_ttl)
             if child_card is not None:
-                sub_tasks.append({"folder": child_card["folder"], "column": child_card["column"], "goal": child_card["goal"]})
+                sub_tasks.append(
+                    {
+                        "folder": child_card["folder"],
+                        "column": child_card["column"],
+                        "needs_attention": child_card["needs_attention"],
+                        "active": child_card["active"],
+                        "goal": child_card["goal"],
+                    }
+                )
 
     return {
         "project": card["project"],
@@ -625,6 +658,8 @@ def build_detail(
         "parent": card["parent"],
         "kind": card["kind"],
         "column": card["column"],
+        "needs_attention": card["needs_attention"],
+        "active": card["active"],
         "frontmatter": frontmatter,
         "activity": activity,
         "draft_content": draft_content,
