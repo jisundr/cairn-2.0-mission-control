@@ -53,6 +53,11 @@ export function App() {
   const [openTask, setOpenTask] = useState<string | null>(
     initialView.kind === "tab" ? (initialView.task ?? null) : null,
   );
+  // The project a real card/sub-task click already named for `openTask` -
+  // never part of the URL (§6.5's literal `?task=<folder>&tab=...` shape),
+  // so it's always `null` on first load: Kanban.tsx falls back to its own
+  // cross-project folder lookup in that case, same as before this existed.
+  const [openTaskProject, setOpenTaskProject] = useState<string | null>(null);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>(
     initialView.kind === "tab" ? (initialView.drawerTab ?? "details") : "details",
   );
@@ -61,6 +66,7 @@ export function App() {
     setActiveTabState(tab);
     setViewSessionId(null);
     setOpenTask(null);
+    setOpenTaskProject(null);
     const path = pathForView({ kind: "tab", tab });
     if (path !== window.location.pathname) window.history.pushState(null, "", path);
   }
@@ -76,8 +82,9 @@ export function App() {
   // pushes (not replaces) so the drawer's own open/close/tab-change history
   // is real browser-back-able, matching `navigateToTab`/`navigateToSession`'s
   // own convention.
-  function navigateToTask(task: string | null, tab: DrawerTab = "details") {
+  function navigateToTask(task: string | null, tab: DrawerTab = "details", project?: string) {
     setOpenTask(task);
+    setOpenTaskProject(project ?? null);
     setDrawerTab(tab);
     setActiveTabState("kanban");
     const path = pathForView({ kind: "tab", tab: "kanban", task: task ?? undefined, drawerTab: tab });
@@ -105,10 +112,15 @@ export function App() {
         setViewSessionId(view.sessionId);
         setActiveTabState("sessions");
         setOpenTask(null);
+        setOpenTaskProject(null);
       } else {
         setViewSessionId(null);
         setActiveTabState(view.tab);
         setOpenTask(view.task ?? null);
+        // Back/forward restores from the URL alone, which never carries
+        // `project` (§6.5) - Kanban.tsx's own cross-project folder lookup
+        // resolves it instead, same as a hard reload.
+        setOpenTaskProject(null);
         setDrawerTab(view.drawerTab ?? "details");
       }
     }
@@ -137,6 +149,7 @@ export function App() {
         activeTab={activeTab}
         onTabChange={navigateToTab}
         openTask={openTask}
+        openTaskProject={openTaskProject}
         drawerTab={drawerTab}
         onOpenTask={navigateToTask}
       />

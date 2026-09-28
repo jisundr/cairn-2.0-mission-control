@@ -7,7 +7,8 @@ scratch HOME so server.py's on-demand transcript lookup resolves
 usage-limit event (WarningBanner + drilldown coverage), one without a
 label (short-id fallback) on an unpriced model (unknown-cost coverage).
 Timestamps are relative to the run's current time, not hardcoded, since
-server.py's range windows are wall-clock-relative.
+server.py's range windows are wall-clock-relative. Also one `docs/tasks/`
+folder (Kanban board coverage - a real card to open a real drawer on).
 
 Usage: python3 seed.py <scratch_dir>
 `<scratch_dir>/project` becomes the project root passed to server.py;
@@ -153,6 +154,28 @@ def seed_transcript(scratch: Path, project_root: Path) -> None:
             f.write(json.dumps(entry) + "\n")
 
 
+KANBAN_TASK_FOLDER = "docs/tasks/2026-01-01-0000-research-e2e-drawer-fixture"
+
+
+def seed_task_folder(project_root: Path) -> None:
+    """One `docs/tasks/` folder so the Kanban board (goal 11) has a real
+    card to open a real drawer on - `research`-kind (tasks.py's `_done_fact`
+    never shells out to `gh` for it) so this stays hermetic like every other
+    fixture here, no `gh`/network dependency."""
+    folder = project_root / KANBAN_TASK_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "STATE.md").write_text(
+        "---\n"
+        "goal: E2E fixture task folder, used only to exercise the Kanban drawer (§6.7) in a real browser.\n"
+        "path: escalated\n"
+        "key_info: fixture only, not a live task\n"
+        "flags: []\n"
+        "---\n"
+        "> state read on resume; log below is append-only.\n\n"
+        "- 2026-01-01: Fixture folder seeded by seed.py for drawer-sizing e2e coverage.\n"
+    )
+
+
 def main() -> None:
     scratch = Path(sys.argv[1]).resolve()
     project_root = scratch / "project"
@@ -161,6 +184,7 @@ def main() -> None:
     now = datetime.now(timezone.utc)
     seed_db(project_root, now)
     seed_transcript(scratch, project_root)
+    seed_task_folder(project_root)
     print(project_root)
 
 

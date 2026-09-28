@@ -15,12 +15,16 @@ interface KanbanProps {
   activeTab: AppTab;
   onTabChange: (tab: AppTab) => void;
   // Drawer URL state lives in App.tsx (PRD §6.5) - `openTask` is a folder
-  // path or `null` (closed); this page only resolves which *project* that
-  // folder belongs to (the URL itself never carries `project`, per §6.5's
-  // literal `?task=<folder>&tab=...` shape) and renders the drawer.
+  // path or `null` (closed); the URL itself never carries `project`, per
+  // §6.5's literal `?task=<folder>&tab=...` shape. `openTaskProject` is
+  // App.tsx's own session-only memory of the project a real click already
+  // named (`null` on first load/URL-restore/back-forward, where there is
+  // genuinely no other way to know it yet) - this page falls back to the
+  // cross-project task list's own folder lookup only in that case.
   openTask: string | null;
+  openTaskProject: string | null;
   drawerTab: DrawerTab;
-  onOpenTask: (task: string | null, tab?: DrawerTab) => void;
+  onOpenTask: (task: string | null, tab?: DrawerTab, project?: string) => void;
 }
 
 const COLUMNS: { key: TaskColumn; title: string }[] = [
@@ -37,7 +41,7 @@ const COLUMNS: { key: TaskColumn; title: string }[] = [
 // AppHeader/InstallScopeRow verbatim (§9's install-type-reuse note - no new
 // UI for single- vs. multi-project); the pill/title/favicon/chime (§6.9)
 // already live inside AppHeader itself, not duplicated here.
-export function Kanban({ activeTab, onTabChange, openTask, drawerTab, onOpenTask }: KanbanProps) {
+export function Kanban({ activeTab, onTabChange, openTask, openTaskProject, drawerTab, onOpenTask }: KanbanProps) {
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
 
   const projects = useProjects();
@@ -49,7 +53,9 @@ export function Kanban({ activeTab, onTabChange, openTask, drawerTab, onOpenTask
   // different project - shares its cache/query with AppHeader's own
   // identical unfiltered call (`useTasks()`), so this is never an extra poll.
   const allTasks = useTasks();
-  const drawerProject = openTask ? (allTasks.data?.find((t) => t.folder === openTask)?.project ?? null) : null;
+  const drawerProject = openTask
+    ? (openTaskProject ?? allTasks.data?.find((t) => t.folder === openTask)?.project ?? null)
+    : null;
 
   const grouped: Record<TaskColumn, TaskCardData[]> = {
     ready: [],
@@ -117,7 +123,7 @@ export function Kanban({ activeTab, onTabChange, openTask, drawerTab, onOpenTask
                     key={`${t.project}::${t.folder}`}
                     task={t}
                     showProject={multiProject}
-                    onClick={() => onOpenTask(t.folder, "details")}
+                    onClick={(project, folder) => onOpenTask(folder, "details", project)}
                   />
                 ))}
               </div>
@@ -133,8 +139,11 @@ export function Kanban({ activeTab, onTabChange, openTask, drawerTab, onOpenTask
           folder={openTask}
           tab={drawerTab}
           onClose={() => onOpenTask(null)}
-          onTabChange={(tab) => onOpenTask(openTask, tab)}
-          onOpenTask={(_project, folder) => onOpenTask(folder, "details")}
+          // Carries the already-resolved `drawerProject` along so a tab
+          // switch doesn't drop back to the by-folder-only fallback lookup
+          // on the next render.
+          onTabChange={(tab) => onOpenTask(openTask, tab, drawerProject)}
+          onOpenTask={(project, folder) => onOpenTask(folder, "details", project)}
         />
       )}
     </div>

@@ -11,8 +11,11 @@ interface TaskCardProps {
   // Opens the detail drawer (../04-frontend-drawer-docs/'s own build) on
   // this card's own folder - optional so a caller with no drawer yet (there
   // is none left in this app) can still render a plain, non-interactive
-  // card, matching this component's pre-drawer behavior exactly.
-  onClick?: () => void;
+  // card, matching this component's pre-drawer behavior exactly. Carries
+  // this card's own already-known `project` (never re-derived by the
+  // caller from a folder-string-only lookup, which breaks when two
+  // projects happen to produce a same-named folder).
+  onClick?: (project: string, folder: string) => void;
 }
 
 // `.kcard` per `board-single-project.html`/`board-multi-project.html` -
@@ -31,7 +34,7 @@ export function TaskCard({ task, showProject, onClick }: TaskCardProps) {
     <div
       className="kcard"
       data-testid={`task-card-${task.folder}`}
-      onClick={onClick}
+      onClick={onClick ? () => onClick(task.project, task.folder) : undefined}
       style={onClick ? { cursor: "pointer" } : undefined}
     >
       <div className="kcard-top">

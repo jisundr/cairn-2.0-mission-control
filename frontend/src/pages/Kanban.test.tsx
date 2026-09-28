@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskCard } from "../api/types";
 import { _resetAttentionModuleStateForTests } from "../lib/attention";
@@ -39,7 +39,15 @@ function install(tasks: TaskCard[], projects = [{ label: "cairn-2.0", parent: nu
 // are both known.
 function renderKanban(overrides: Partial<Parameters<typeof Kanban>[0]> = {}) {
   return renderWithClient(
-    <Kanban activeTab="kanban" onTabChange={noop} openTask={null} drawerTab="details" onOpenTask={noop} {...overrides} />,
+    <Kanban
+      activeTab="kanban"
+      onTabChange={noop}
+      openTask={null}
+      openTaskProject={null}
+      drawerTab="details"
+      onOpenTask={noop}
+      {...overrides}
+    />,
   );
 }
 
@@ -110,16 +118,60 @@ describe("Kanban", () => {
     expect(screen.getByText("No task folders yet")).toBeInTheDocument();
   });
 
-  it("reports a clicked card's folder up via onOpenTask (§6.5's wiring, not the drawer's own content)", async () => {
+  it("reports a clicked card's folder and its own already-known project up via onOpenTask (§6.5's wiring, not the drawer's own content)", async () => {
     const folder = "docs/tasks/2026-09-01-0900-ready-one";
-    install([task({ folder, column: "ready" })]);
+    install([task({ folder, column: "ready", project: "cairn-2.0" })]);
     const onOpenTask = vi.fn();
     renderKanban({ onOpenTask });
 
     await waitFor(() => expect(screen.getByTestId(`task-card-${folder}`)).toBeInTheDocument());
     fireEvent.click(screen.getByTestId(`task-card-${folder}`));
 
-    expect(onOpenTask).toHaveBeenCalledWith(folder, "details");
+    expect(onOpenTask).toHaveBeenCalledWith(folder, "details", "cairn-2.0");
+  });
+
+  it("opens the clicked project's own drawer content, not the first project sharing that folder name (a real click's project bypasses the by-folder-only fallback lookup)", async () => {
+    const folder = "docs/tasks/0001-shared-folder-name";
+    installFetchMock({
+      "/api/projects": () =>
+        envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "project-a", parent: null },
+            { label: "project-b", parent: null },
+          ],
+        }),
+      "/api/tasks": () =>
+        envelope([
+          task({ project: "project-a", folder, goal: "Project A's own task" }),
+          task({ project: "project-b", folder, goal: "Project B's own task" }),
+        ]),
+      "/api/tasks/detail": (params) =>
+        envelope({
+          project: params.get("project"),
+          folder,
+          parent: null,
+          kind: "build",
+          column: "ready",
+          frontmatter: { goal: params.get("project") === "project-b" ? "Project B's own task" : "Project A's own task" },
+          activity: [],
+          draft_content: null,
+          sub_tasks: null,
+          docs: [],
+        }),
+    });
+    // Simulates the render right after a direct click on project-b's card:
+    // `openTaskProject` is already known, so Kanban must not fall back to
+    // `allTasks.data.find()`'s first-match-wins-by-folder lookup, which
+    // would resolve project-a instead (it's first in `/api/tasks`).
+    renderKanban({ openTask: folder, openTaskProject: "project-b" });
+
+    // Scoped to the drawer itself - both projects' own cards behind it
+    // legitimately render "Project A's/B's own task" as their goal text, so
+    // only the drawer's own content is a meaningful assertion here.
+    const drawer = within(await screen.findByTestId("task-drawer"));
+    await waitFor(() => expect(drawer.getByText("Project B's own task")).toBeInTheDocument());
+    expect(drawer.queryByText("Project A's own task")).not.toBeInTheDocument();
   });
 
   it("mounts the drawer once openTask's project resolves from the (unfiltered) task list", async () => {

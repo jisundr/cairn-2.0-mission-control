@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { TaskCard as TaskCardData } from "../api/types";
 import { TaskCard } from "./TaskCard";
 
@@ -72,5 +72,15 @@ describe("TaskCard", () => {
     render(<TaskCard task={task({ column: "done" })} showProject={false} />);
     expect(screen.queryByText("active")).not.toBeInTheDocument();
     expect(document.querySelector(".kcard-attn")).not.toBeInTheDocument();
+  });
+
+  it("passes its own already-known project alongside its folder on click, so the caller never has to re-derive it by folder alone", () => {
+    const onClick = vi.fn();
+    const cardTask = task({ project: "project-b", folder: "docs/tasks/0001-shared-folder-name" });
+    render(<TaskCard task={cardTask} showProject onClick={onClick} />);
+
+    fireEvent.click(screen.getByTestId(`task-card-${cardTask.folder}`));
+
+    expect(onClick).toHaveBeenCalledWith("project-b", "docs/tasks/0001-shared-folder-name");
   });
 });
