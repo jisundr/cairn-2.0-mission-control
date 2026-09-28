@@ -46,7 +46,7 @@ export function App() {
 
   useEffect(() => {
     const view = parseView(window.location.pathname);
-    window.history.replaceState(null, "", pathForView(view));
+    window.history.replaceState(null, "", pathForView(view) + window.location.search);
   }, []);
 
   useEffect(() => {
