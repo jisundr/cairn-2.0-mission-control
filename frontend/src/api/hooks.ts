@@ -102,6 +102,20 @@ export function useSessionTrace(sessionId: string | null, project?: string) {
   });
 }
 
+// Kanban board (v2): a flat card list, grouped into columns client-side
+// (Kanban.tsx) - same division of labor as every other list-shaped route
+// here. `project` is optional (the cross-project, unfiltered fetch AppHeader
+// itself uses for the header-wide Needs Attention count) - `undefined` and
+// omitting the param entirely share one queryKey/cache entry, same
+// convention as every other `project?` hook above.
+export function useTasks(project?: string) {
+  return useQuery({
+    queryKey: ["tasks", project ?? "all"],
+    queryFn: () => api.tasks(project),
+    refetchInterval: POLL_INTERVAL_MS,
+  });
+}
+
 // Batched per-call detail for the drilldown's chat-thread: one query per
 // `global_position`. Order of the returned results matches `positions`.
 export function useCallDetails(sessionId: string | null, positions: number[], project?: string) {

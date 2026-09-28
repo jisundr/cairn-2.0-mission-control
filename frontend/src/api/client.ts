@@ -13,6 +13,7 @@ import type {
   RangeKey,
   SessionSummary,
   SessionTrace,
+  TaskCard,
   Timeseries,
   UsageLimitEvent,
 } from "./types";
@@ -70,4 +71,6 @@ export const api = {
 
   callDetail: (sessionId: string, n: number, project?: string) =>
     apiGet<CallDetail>(`/call/${encodeURIComponent(sessionId)}/${n}`, { project }),
+
+  tasks: (project?: string) => apiGet<TaskCard[]>("/tasks", { project }),
 };

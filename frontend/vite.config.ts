@@ -15,6 +15,12 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // jsdom's default test URL is "about:blank", an opaque origin that
+    // throws on any `localStorage` access at all (Storage API requires a
+    // real origin) - the attention-signaling mute toggle (PRD §6.9) is this
+    // app's first use of it, so tests need a concrete origin the way the
+    // real app already has one (served from `http://localhost:<port>`).
+    environmentOptions: { jsdom: { url: "http://localhost/" } },
     setupFiles: ["./src/setupTests.ts"],
     globals: true,
     // Vitest's default excludes don't cover e2e/ - without this it also

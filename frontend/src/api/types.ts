@@ -149,3 +149,32 @@ export interface ApiError {
   error: string;
   valid_ranges?: string[];
 }
+
+// Kanban board (v2, PRD §9) - one card per `docs/tasks/*/` folder (and its
+// sub-task children), across every known project. `column` is the backend's
+// own §6.2 precedence result; `active`/`needs_attention`/`done` are the raw
+// contributing facts, kept for transparency rather than re-derived here.
+export type TaskColumn = "ready" | "needs_attention" | "ongoing" | "done";
+export type TaskKind = "build" | "research" | "review";
+
+export interface TaskSubTasksSummary {
+  done: number;
+  total: number;
+}
+
+export interface TaskCard {
+  project: string;
+  folder: string;
+  parent: string | null;
+  kind: TaskKind;
+  goal: string;
+  key_info: string;
+  last_log_date: string;
+  column: TaskColumn;
+  active: boolean;
+  needs_attention: boolean;
+  done: boolean;
+  // Present only on a folder that has sub-task children (PRD §6.4) - `null`
+  // otherwise, never a `{done: 0, total: 0}` zero-value.
+  sub_tasks: TaskSubTasksSummary | null;
+}

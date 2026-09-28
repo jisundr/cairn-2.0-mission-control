@@ -109,6 +109,19 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .icon-btn:hover { border-color: var(--ink-soft); color: var(--ink); background: var(--panel-sunken); }
 .icon-btn svg { width: 13px; height: 13px; }
 
+/* Kanban's persistent Needs Attention header pill (PRD §6.9) - visible from
+   every tab via AppHeader, not just Kanban itself. No mockup shows this
+   state (none of the approved board mockups happen to render with the app
+   header itself badged), so it's new markup - but --remove/--remove-bg is
+   the same accent WarningBanner.tsx and .kcard-attn already use for this
+   exact state, not a new color. */
+.attn-pill {
+  display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--remove); background: var(--remove-bg); border: 1px solid var(--remove); border-radius: 12px;
+  padding: 3px 10px 3px 10px; cursor: pointer;
+}
+.attn-pill:hover { background: var(--remove-line); color: var(--panel); }
+
 /* ---- range control ---- */
 .range-row { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
 .range-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
@@ -419,6 +432,41 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .skel { background: var(--border-soft); border-radius: 4px; animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
+/* ---- Kanban board (v2): 4 status columns (Ready/Needs Attention/Ongoing/
+   Done, PRD §6.2's precedence rule, not a build-phase view) of read-only
+   cards. Column and card are new structure but no new color: Ongoing reuses
+   the header's own .status-dot green exactly (this world's one "connected/
+   live" device), Needs Attention reuses --remove the same way .panel.err
+   already does. The parent progress bar (§6.4) reuses HbarList's own
+   .hbar-track/.hbar-fill idiom (base rule below - HbarList itself moved
+   onto Recharts' own per-row shape renderers and dropped these, per the
+   dead-code note above, so the kcard-progress override needs its own base
+   rather than relying on a definition HbarList no longer provides). ---- */
+.hbar-track { background: var(--border-soft); border-radius: 3px; overflow: hidden; }
+.hbar-fill { height: 100%; background: var(--add); }
+.kanban-columns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
+.kanban-column-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 10px; }
+.kanban-column-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
+.kanban-column-count { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink-faint); background: var(--border-soft); border-radius: 10px; padding: 1px 7px; }
+.kanban-column-cards { display: flex; flex-direction: column; gap: 8px; }
+.kcard { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 11px 13px; display: flex; flex-direction: column; min-width: 0; }
+.kcard-top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.kcard-kind { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); background: var(--border-soft); border-radius: 3px; padding: 1px 5px; }
+.kcard-project { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink-soft); margin-left: auto; }
+.kcard-title { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.3; margin-bottom: 4px; }
+.kcard-goal { font-size: 12px; line-height: 1.5; color: var(--ink-soft); margin-bottom: 8px; }
+.kcard-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: auto; }
+.kcard-date { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); }
+.kcard-ongoing { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--add); }
+.kcard-ongoing .status-dot { width: 6px; height: 6px; }
+.kcard-attn { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--remove); background: var(--remove-bg); border-radius: 3px; padding: 1px 6px; }
+.kcard-progress { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.kcard-progress .hbar-track { width: 42px; height: 5px; }
+.kcard-progress .hbar-fill { background: var(--add); }
+.kcard-progress-label { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink); }
+.kcard-parent { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-bottom: 6px; align-self: flex-start; }
+.kcard-parent svg { width: 8px; height: 8px; stroke: currentColor; flex-shrink: 0; }
+
 @media (max-width: 900px) {
   .grid, .grid-2, .drill-grid { grid-template-columns: 1fr; }
   .shell { padding: 16px 16px 36px; }
@@ -427,4 +475,5 @@ table.sessions a.sess:hover { text-decoration: underline; }
   .wordmark .sub-short { display: inline; }
   nav.app-tabs { display: none; }
   .dropdown-btn.nav-dropdown { display: flex; }
+  .kanban-columns { grid-template-columns: 1fr; }
 }

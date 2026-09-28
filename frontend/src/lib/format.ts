@@ -76,6 +76,19 @@ export function formatSessionDuration(startIso: string, endIso: string): string 
   return `${Math.round(totalSeconds)}s`;
 }
 
+// Kanban card title (PRD §6.1/§6.3): `/api/tasks`' `folder` is a full
+// relative path (e.g. "docs/tasks/2026-09-28-1345-build-kanban-board") for
+// a top-level task, or the same shape ending in a sub-task's own
+// "0N-<kind>-slug" for a child - the approved mockups show neither the
+// "docs/tasks/" prefix nor a top-level folder's own "YYYY-MM-DD-HHMM-"
+// date/time prefix (e.g. "build-kanban-board", not the folder's literal
+// name), while a sub-task's "0N-..." numbering stays as-is (it never had a
+// date prefix to strip). Basename first, then strip that one prefix shape.
+export function taskDisplayName(folder: string): string {
+  const basename = folder.split("/").pop() ?? folder;
+  return basename.replace(/^\d{4}-\d{2}-\d{2}-\d{4}-/, "");
+}
+
 export function formatRelativeToNow(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
   const diffMs = now.getTime() - then;

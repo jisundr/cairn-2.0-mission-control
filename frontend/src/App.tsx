@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AppTab } from "./components/AppHeader";
 import { Drilldown } from "./pages/Drilldown";
+import { Kanban } from "./pages/Kanban";
 import { Overview } from "./pages/Overview";
 import { SessionsList } from "./pages/SessionsList";
 
@@ -8,12 +9,15 @@ type View = { kind: "tab"; tab: AppTab } | { kind: "session"; sessionId: string 
 
 function pathForView(view: View): string {
   if (view.kind === "session") return `/sessions/${encodeURIComponent(view.sessionId)}`;
-  return view.tab === "sessions" ? "/sessions" : "/";
+  if (view.tab === "sessions") return "/sessions";
+  if (view.tab === "kanban") return "/kanban";
+  return "/";
 }
 
 function parseView(pathname: string): View {
   const sessionMatch = pathname.match(/^\/sessions\/(.+)$/);
   if (sessionMatch) return { kind: "session", sessionId: decodeURIComponent(sessionMatch[1]) };
+  if (pathname.startsWith("/kanban")) return { kind: "tab", tab: "kanban" };
   return { kind: "tab", tab: pathname.startsWith("/sessions") ? "sessions" : "overview" };
 }
 
@@ -77,6 +81,10 @@ export function App() {
 
   if (activeTab === "overview") {
     return <Overview activeTab={activeTab} onTabChange={navigateToTab} />;
+  }
+
+  if (activeTab === "kanban") {
+    return <Kanban activeTab={activeTab} onTabChange={navigateToTab} />;
   }
 
   return <SessionsList activeTab={activeTab} onTabChange={navigateToTab} onSelectSession={navigateToSession} />;
