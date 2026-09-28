@@ -116,6 +116,29 @@ export function useTasks(project?: string) {
   });
 }
 
+// Detail drawer (v2, PRD §6.5/§9): fetched once per open folder, no polling
+// - a drawer is a point-in-time read of that folder's own state, not a live
+// view like the board itself. `enabled` gates on both id parts being
+// present, matching `useSessionTrace`'s own null-guard convention.
+export function useTaskDetail(project: string | null, folder: string | null) {
+  return useQuery({
+    queryKey: ["task-detail", project ?? "", folder ?? ""],
+    queryFn: () => api.taskDetail(project as string, folder as string),
+    enabled: project !== null && folder !== null,
+  });
+}
+
+// Docs tab content (§6.6): fetched only once a sidebar row is actually
+// clicked (`file !== null`), never bundled into `useTaskDetail`'s payload -
+// switching files re-fetches into the same query key's next value.
+export function useTaskDoc(project: string | null, folder: string | null, file: string | null) {
+  return useQuery({
+    queryKey: ["task-doc", project ?? "", folder ?? "", file ?? ""],
+    queryFn: () => api.taskDoc(project as string, folder as string, file as string),
+    enabled: project !== null && folder !== null && file !== null,
+  });
+}
+
 // Batched per-call detail for the drilldown's chat-thread: one query per
 // `global_position`. Order of the returned results matches `positions`.
 export function useCallDetails(sessionId: string | null, positions: number[], project?: string) {

@@ -1,0 +1,352 @@
+import { useRef, useState } from "react";
+import Markdown from "markdown-to-jsx";
+import { useTaskDetail, useTaskDoc } from "../api/hooks";
+import type { TaskColumn, TaskDetail, TaskDoc } from "../api/types";
+import { taskDisplayName } from "../lib/format";
+
+interface TaskDrawerProps {
+  project: string;
+  folder: string;
+  tab: "details" | "docs";
+  onClose: () => void;
+  onTabChange: (tab: "details" | "docs") => void;
+  // A sub-task row (Details tab, §6.5) re-opens the drawer on that child -
+  // always the same project as the parent drawer already showing it.
+  onOpenTask: (project: string, folder: string) => void;
+}
+
+// TaskDrawer.tsx per `board-drawer-open.html`/`board-drawer-docs.html`/
+// `board-drawer-needs-attention.html` (PRD §6.5-§6.8, §10) - the app's first
+// overlay: a GitLab-issue-style panel (backdrop + slide-in body, sized by
+// `design.css`'s `.drawer`/900px-breakpoint rules alone, no JS viewport
+// check needed - same division of labor AppHeader's own F3 nav-collapse
+// already established). Two tabs, both always mounted once data loads;
+// `tab`/`onTabChange` and `onClose` are controlled by the caller (Kanban.tsx)
+// so the open task/tab pair can live in the URL (§6.5's "URL state").
+export function TaskDrawer({ project, folder, tab, onClose, onTabChange, onOpenTask }: TaskDrawerProps) {
+  const detail = useTaskDetail(project, folder);
+  const data = detail.data;
+
+  return (
+    <>
+      <div className="drawer-backdrop" data-testid="drawer-backdrop" onClick={onClose} />
+      <div className="drawer" data-testid="task-drawer">
+        <div className="drawer-head">
+          <div>
+            <div className="drawer-title">{taskDisplayName(folder)}</div>
+            {data && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="kcard-kind">{data.kind}</span>
+                <ColumnBadge column={data.column} />
+              </div>
+            )}
+          </div>
+          <button type="button" className="drawer-close" aria-label="Close" onClick={onClose}>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="6" y1="18" x2="18" y2="6" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="drawer-tabs">
+          <button
+            type="button"
+            className={`drawer-tab${tab === "details" ? " active" : ""}`}
+            data-testid="drawer-tab-details"
+            onClick={() => onTabChange("details")}
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            className={`drawer-tab${tab === "docs" ? " active" : ""}`}
+            data-testid="drawer-tab-docs"
+            onClick={() => onTabChange("docs")}
+          >
+            Docs{data ? ` (${data.docs.length})` : ""}
+          </button>
+        </div>
+
+        {!data ? (
+          <div className="drawer-body" data-testid="drawer-loading">
+            {detail.isError ? "Couldn't load this task folder." : "Loading…"}
+          </div>
+        ) : tab === "details" ? (
+          <div className="drawer-body">
+            <DetailsTab data={data} onOpenTask={onOpenTask} />
+          </div>
+        ) : (
+          <div className="drawer-body docs-tab">
+            <DocsTab project={project} folder={folder} docs={data.docs} />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+const COLUMN_LABEL: Record<TaskColumn, string> = {
+  ready: "Ready",
+  needs_attention: "needs attention",
+  ongoing: "Ongoing",
+  done: "Done",
+};
+
+function ColumnBadge({ column }: { column: TaskColumn }) {
+  if (column === "needs_attention") return <span className="kcard-attn">{COLUMN_LABEL[column]}</span>;
+  if (column === "ongoing") {
+    return (
+      <span className="kcard-ongoing">
+        <span className="status-dot" />
+        {COLUMN_LABEL[column]}
+      </span>
+    );
+  }
+  return <span className="kcard-kind">{COLUMN_LABEL[column]}</span>;
+}
+
+// Reply composer (§6.8) - Needs Attention cards only, rendered above the
+// frontmatter table. Uncontrolled textarea (a ref, not state): the "Copy"
+// button just needs the field's current value at click time, and nothing
+// else in this component (or anywhere else - §6.8's whole point) ever reads
+// or sends it, so there's no reason to re-render on every keystroke.
+function ReplyComposer({ keyInfo }: { keyInfo: string }) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="reply-composer" data-testid="reply-composer">
+      <div className="reply-head">
+        <span className="kcard-attn">needs attention</span>
+        <span className="reply-title">Needs your attention</span>
+      </div>
+      <div className="reply-reason">key_info: &quot;{keyInfo}&quot;</div>
+      <textarea ref={textareaRef} className="reply-textarea" placeholder="Draft a reply…" data-testid="reply-textarea" />
+      <div className="reply-actions">
+        <button
+          type="button"
+          className="reply-copy-btn"
+          data-testid="reply-copy-btn"
+          onClick={() => {
+            void navigator.clipboard.writeText(textareaRef.current?.value ?? "");
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+        <span className="reply-note">
+          Paste this into the terminal — mission control can&apos;t send it there directly.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Details tab (§6.5): frontmatter as a field/value table, a parent's direct
+// sub-task children (if any), then the activity timeline - or, for a
+// `review` folder, `draft_content` in the timeline's place - all in one
+// scroll, per the merged Details+Activity tab decision this folder's own
+// STATE.md log records.
+function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (project: string, folder: string) => void }) {
+  const fm = data.frontmatter;
+  const rows: { key: string; value: string; mono?: boolean }[] = [
+    { key: "Folder", value: taskDisplayName(data.folder) },
+    { key: "Project", value: data.project },
+    { key: "Kind", value: data.kind },
+    { key: "Column", value: COLUMN_LABEL[data.column] },
+  ];
+  if (fm.goal) rows.push({ key: "Goal", value: fm.goal });
+  if (fm.paths?.length) rows.push({ key: "Paths", value: fm.paths.join(", "), mono: true });
+  if (fm.done_when) rows.push({ key: "Done when", value: fm.done_when });
+  if (fm.out_of_scope?.length) rows.push({ key: "Out of scope", value: fm.out_of_scope.join(", ") });
+  if (fm.source) rows.push({ key: "Source", value: fm.source });
+  if (fm.path) rows.push({ key: "Path", value: fm.path, mono: true });
+  if (fm.key_info) rows.push({ key: "Key info", value: fm.key_info });
+  if (fm.flags?.length) rows.push({ key: "Flags", value: fm.flags.join(", ") });
+
+  return (
+    <>
+      {data.column === "needs_attention" && <ReplyComposer keyInfo={fm.key_info ?? ""} />}
+
+      <div className="drawer-section">
+        <div className="drawer-section-title">Details</div>
+        <table className="detail">
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key}>
+                <td className="dt-key">{row.key}</td>
+                <td className={row.mono ? "dt-val mono" : "dt-val"}>{row.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {data.sub_tasks && data.sub_tasks.length > 0 && (
+        <div className="drawer-section">
+          <div className="drawer-section-title">Sub-tasks</div>
+          <div className="subtask-list">
+            {data.sub_tasks.map((st) => (
+              <button
+                key={st.folder}
+                type="button"
+                className="subtask-row"
+                data-testid={`subtask-row-${st.folder}`}
+                onClick={() => onOpenTask(data.project, st.folder)}
+              >
+                <span className="subtask-name">{taskDisplayName(st.folder)}</span>
+                <span className="subtask-goal">{st.goal}</span>
+                <ColumnBadge column={st.column} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="drawer-section">
+        <div className="drawer-section-title">{data.activity !== null ? "Activity" : "Draft"}</div>
+        {data.activity !== null ? (
+          <div className="timeline">
+            {data.activity.map((entry, i) => (
+              <div className="timeline-item" key={`${entry.date}-${i}`}>
+                <div className="timeline-date">{entry.date}</div>
+                <div className="timeline-text">{entry.text}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="timeline-text" style={{ whiteSpace: "pre-wrap" }}>
+            {data.draft_content}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function formatDocSize(bytes: number): string {
+  return bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
+}
+
+const DOC_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+  </svg>
+);
+
+// Docs tab (§6.6): a persistent left sidebar + main content pane, GitLab's
+// own file-browser layout - both the sidebar and the <=900px
+// `.docs-mobile-picker` dropdown (reusing InstallScopeRow.tsx's own
+// dropdown-wrap/-btn/-menu markup verbatim, not a second dropdown) are
+// always rendered; `design.css`'s existing 900px breakpoint alone decides
+// which one shows, the same CSS-only division of labor AppHeader's F3
+// nav-collapse already established (no matchMedia/innerWidth check here).
+function DocsTab({ project, folder, docs }: { project: string; folder: string; docs: TaskDoc[] }) {
+  const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const doc = useTaskDoc(project, folder, selectedDoc);
+
+  if (docs.length === 0) {
+    return (
+      <div className="docs-main-empty" data-testid="docs-empty" style={{ width: "100%" }}>
+        no other documents
+      </div>
+    );
+  }
+
+  const selectedMeta = docs.find((d) => d.name === selectedDoc) ?? null;
+
+  return (
+    <div className="docs-layout">
+      <div className="docs-sidebar">
+        <div className="docs-sidebar-path">
+          <b>{project}</b> / {taskDisplayName(folder)}
+        </div>
+        <div className="docs-file-list">
+          {docs.map((d) => (
+            <button
+              key={d.name}
+              type="button"
+              className={`docs-file${selectedDoc === d.name ? " active" : ""}`}
+              data-testid={`docs-file-${d.name}`}
+              onClick={() => setSelectedDoc(d.name)}
+            >
+              <span className="doc-icon">{DOC_ICON}</span>
+              <span className="doc-name">{d.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="docs-mobile-picker">
+        <div className="dropdown-wrap">
+          <button
+            type="button"
+            className="dropdown-btn"
+            data-testid="docs-mobile-dropdown"
+            onClick={() => setMobileOpen((o) => !o)}
+          >
+            {selectedDoc ?? "Select a document"}
+            <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {mobileOpen && (
+            <div className="dropdown-menu" data-testid="docs-mobile-menu">
+              {docs.map((d) => (
+                <div
+                  key={d.name}
+                  className="dropdown-item"
+                  data-testid={`docs-mobile-option-${d.name}`}
+                  onClick={() => {
+                    setSelectedDoc(d.name);
+                    setMobileOpen(false);
+                  }}
+                >
+                  {d.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="docs-main">
+        {selectedDoc === null ? (
+          <div className="docs-main-empty" data-testid="docs-select-placeholder">
+            select a document
+          </div>
+        ) : doc.data ? (
+          <>
+            <div className="docs-main-head">
+              <div className="docs-main-title">{selectedDoc}</div>
+              {selectedMeta && (
+                <div className="docs-main-meta">
+                  {formatDocSize(selectedMeta.size)} · modified {selectedMeta.modified}
+                </div>
+              )}
+            </div>
+            <div className="doc-render">
+              <Markdown options={{ disableParsingRawHTML: true }}>{doc.data.content}</Markdown>
+            </div>
+          </>
+        ) : (
+          <div className="docs-main-empty" data-testid="docs-loading">
+            {doc.isError ? "Couldn't load this document." : "Loading…"}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

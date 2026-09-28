@@ -13,6 +13,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-virtual": "^3.14.10",
+    "markdown-to-jsx": "^9.10.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "recharts": "^3.10.1"

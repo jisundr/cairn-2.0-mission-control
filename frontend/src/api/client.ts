@@ -14,6 +14,8 @@ import type {
   SessionSummary,
   SessionTrace,
   TaskCard,
+  TaskDetail,
+  TaskDocContent,
   Timeseries,
   UsageLimitEvent,
 } from "./types";
@@ -73,4 +75,10 @@ export const api = {
     apiGet<CallDetail>(`/call/${encodeURIComponent(sessionId)}/${n}`, { project }),
 
   tasks: (project?: string) => apiGet<TaskCard[]>("/tasks", { project }),
+
+  taskDetail: (project: string, folder: string) =>
+    apiGet<TaskDetail>("/tasks/detail", { project, folder }),
+
+  taskDoc: (project: string, folder: string, file: string) =>
+    apiGet<TaskDocContent>("/tasks/doc", { project, folder, file }),
 };

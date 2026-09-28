@@ -178,3 +178,51 @@ export interface TaskCard {
   // otherwise, never a `{done: 0, total: 0}` zero-value.
   sub_tasks: TaskSubTasksSummary | null;
 }
+
+// Detail drawer (v2, PRD §6.5/§9) - `GET /api/tasks/detail`. `activity` and
+// `draft_content` are mutually exclusive: a `review` folder (DRAFT.md only)
+// carries `draft_content`, everything else carries `activity`.
+export interface TaskFrontmatter {
+  goal?: string;
+  paths?: string[];
+  done_when?: string;
+  out_of_scope?: string[];
+  source?: string;
+  path?: string;
+  key_info?: string;
+  flags?: string[];
+}
+
+export interface ActivityEntry {
+  date: string;
+  text: string;
+}
+
+export interface TaskSubTaskEntry {
+  folder: string;
+  column: TaskColumn;
+  goal: string;
+}
+
+export interface TaskDoc {
+  name: string;
+  size: number;
+  modified: string;
+}
+
+export interface TaskDetail {
+  project: string;
+  folder: string;
+  parent: string | null;
+  kind: TaskKind;
+  column: TaskColumn;
+  frontmatter: TaskFrontmatter;
+  activity: ActivityEntry[] | null;
+  draft_content: string | null;
+  sub_tasks: TaskSubTaskEntry[] | null;
+  docs: TaskDoc[];
+}
+
+export interface TaskDocContent {
+  content: string;
+}

@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskCard } from "../api/types";
 import { _resetAttentionModuleStateForTests } from "../lib/attention";
 import { envelope, installFetchMock, serverError } from "../test/mockApi";
@@ -33,6 +33,16 @@ function install(tasks: TaskCard[], projects = [{ label: "cairn-2.0", parent: nu
   });
 }
 
+// The drawer itself (TaskDrawer.tsx) has its own test file - these tests
+// only cover Kanban's own wiring: a card click reports its folder up via
+// `onOpenTask`, and the drawer mounts once `openTask`/its resolved project
+// are both known.
+function renderKanban(overrides: Partial<Parameters<typeof Kanban>[0]> = {}) {
+  return renderWithClient(
+    <Kanban activeTab="kanban" onTabChange={noop} openTask={null} drawerTab="details" onOpenTask={noop} {...overrides} />,
+  );
+}
+
 describe("Kanban", () => {
   // AppHeader (mounted by every page, including this one) reads/writes
   // module-level attention-signaling state that would otherwise leak
@@ -49,7 +59,7 @@ describe("Kanban", () => {
       task({ folder: "docs/tasks/2026-09-04-0900-done-one", column: "done" }),
       task({ folder: "docs/tasks/2026-09-05-0900-done-two", column: "done" }),
     ]);
-    renderWithClient(<Kanban activeTab="kanban" onTabChange={noop} />);
+    renderKanban();
 
     await waitFor(() => expect(screen.getByText("ready-one")).toBeInTheDocument());
     expect(screen.getByText("attn-one")).toBeInTheDocument();
@@ -81,7 +91,7 @@ describe("Kanban", () => {
         key_info: "stalled",
       }),
     ]);
-    renderWithClient(<Kanban activeTab="kanban" onTabChange={noop} />);
+    renderKanban();
 
     await waitFor(() => expect(screen.getByText("1 of 2 done")).toBeInTheDocument());
     expect(screen.getByTestId(`task-card-${parentFolder}/01-build-first`)).toBeInTheDocument();
@@ -94,10 +104,47 @@ describe("Kanban", () => {
 
   it("shows the empty state when the project has no task folders", async () => {
     install([]);
-    renderWithClient(<Kanban activeTab="kanban" onTabChange={noop} />);
+    renderKanban();
 
     await waitFor(() => expect(screen.getByTestId("kanban-empty")).toBeInTheDocument());
     expect(screen.getByText("No task folders yet")).toBeInTheDocument();
+  });
+
+  it("reports a clicked card's folder up via onOpenTask (§6.5's wiring, not the drawer's own content)", async () => {
+    const folder = "docs/tasks/2026-09-01-0900-ready-one";
+    install([task({ folder, column: "ready" })]);
+    const onOpenTask = vi.fn();
+    renderKanban({ onOpenTask });
+
+    await waitFor(() => expect(screen.getByTestId(`task-card-${folder}`)).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId(`task-card-${folder}`));
+
+    expect(onOpenTask).toHaveBeenCalledWith(folder, "details");
+  });
+
+  it("mounts the drawer once openTask's project resolves from the (unfiltered) task list", async () => {
+    const folder = "docs/tasks/2026-09-01-0900-ready-one";
+    install([task({ folder, column: "ready" })]);
+    installFetchMock({
+      "/api/projects": () => envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }),
+      "/api/tasks": () => envelope([task({ folder, column: "ready" })]),
+      "/api/tasks/detail": () =>
+        envelope({
+          project: "cairn-2.0",
+          folder,
+          parent: null,
+          kind: "build",
+          column: "ready",
+          frontmatter: { goal: "g" },
+          activity: [],
+          draft_content: null,
+          sub_tasks: null,
+          docs: [],
+        }),
+    });
+    renderKanban({ openTask: folder, drawerTab: "details" });
+
+    await waitFor(() => expect(screen.getByTestId("task-drawer")).toBeInTheDocument());
   });
 
   it("shows an error state with retry when /api/tasks fails", async () => {
@@ -105,7 +152,7 @@ describe("Kanban", () => {
       "/api/projects": () => envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }),
       "/api/tasks": () => serverError(),
     });
-    renderWithClient(<Kanban activeTab="kanban" onTabChange={noop} />);
+    renderKanban();
 
     await waitFor(() => expect(screen.getByTestId("kanban-error-text")).toBeInTheDocument());
     const callsBeforeRetry = fetchMock.mock.calls.length;

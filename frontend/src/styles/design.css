@@ -467,6 +467,102 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .kcard-parent { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-bottom: 6px; align-self: flex-start; }
 .kcard-parent svg { width: 8px; height: 8px; stroke: currentColor; flex-shrink: 0; }
 
+/* ---- Task detail drawer: 3/4 width desktop, full width at the existing
+   900px breakpoint below (PRD §6.7) - a GitLab-issue-style overlay, the
+   app's first, built from the same flat/hairline/no-shadow vocabulary as
+   every other panel; the backdrop dim is a focus scrim, not a card
+   elevation effect, so it doesn't read as an exception to that rule. ---- */
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(30, 30, 30, 0.32); z-index: 20; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 75%; background: var(--panel); border-left: 1px solid var(--border); z-index: 21; display: flex; flex-direction: column; }
+.drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid var(--border); }
+.drawer-title { font-size: 16px; font-weight: 700; color: var(--ink); line-height: 1.3; margin-bottom: 7px; }
+.drawer-close { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--ink-soft); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.drawer-close:hover { border-color: var(--ink-soft); color: var(--ink); background: var(--panel-sunken); }
+.drawer-tabs { display: flex; gap: 22px; padding: 0 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.drawer-tab { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); text-decoration: none; padding: 11px 0; border-bottom: 2px solid transparent; cursor: pointer; background: none; border-left: none; border-right: none; border-top: none; }
+.drawer-tab.active { color: var(--ink); border-bottom-color: var(--add-line); }
+.drawer-tab:hover:not(.active) { color: var(--ink); }
+.drawer-body { padding: 20px 24px; overflow: auto; flex-grow: 1; max-width: 680px; }
+/* Docs tab overrides the reading-width cap: a two-pane file browser wants
+   the drawer's full 3/4 width, not a prose column. */
+.drawer-body.docs-tab { max-width: none; padding: 0; overflow: hidden; display: flex; }
+.drawer-section { margin-bottom: 22px; }
+.drawer-section-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 8px; }
+
+/* Reply composer (PRD §6.8) - Needs Attention cards only. No backend, no
+   send: --remove-accented like every other Needs Attention surface, a plain
+   textarea, and a Copy button. The caption is load-bearing, not decoration -
+   researched explicitly that no supported way exists to send this anywhere,
+   so the UI states that limit plainly rather than implying otherwise. */
+.reply-composer { border: 1px solid var(--remove); border-radius: 8px; padding: 14px 16px; margin-bottom: 22px; background: var(--panel); }
+.reply-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.reply-title { font-size: 12.5px; font-weight: 700; color: var(--remove); }
+.reply-reason { font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; }
+.reply-textarea { width: 100%; min-height: 72px; resize: vertical; font-family: var(--sans); font-size: 12.5px; line-height: 1.5; color: var(--ink); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; box-sizing: border-box; }
+.reply-textarea:focus-visible { outline: 2px solid var(--add-line); outline-offset: 1px; }
+.reply-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.reply-copy-btn { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--ink); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; background: transparent; cursor: pointer; flex-shrink: 0; }
+.reply-copy-btn:hover { border-color: var(--ink-soft); background: var(--panel-sunken); }
+.reply-note { font-size: 11px; color: var(--ink-faint); line-height: 1.4; }
+
+/* Details tab's frontmatter table - same hairline-row/mono-label idiom as
+   table.sessions, adapted to a 2-column field/value layout instead of a
+   list of records. */
+table.detail { width: 100%; border-collapse: collapse; }
+table.detail td { padding: 9px 0; border-bottom: 1px solid var(--border-soft); vertical-align: baseline; }
+table.detail tr:last-child td { border-bottom: none; }
+table.detail .dt-key { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); width: 104px; padding-right: 14px; white-space: nowrap; }
+table.detail .dt-val { font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+table.detail .dt-val.mono { font-family: var(--mono); font-size: 12px; }
+
+/* Activity timeline: dated, one entry per STATE.md log line (PRD §6.5) -
+   prose in the body sans (this is narrative, not a measured value), date in
+   mono as a label. */
+.timeline { display: flex; flex-direction: column; }
+.timeline-item { position: relative; padding: 0 0 16px 16px; border-left: 1px solid var(--border-soft); }
+.timeline-item:last-child { border-left-color: transparent; padding-bottom: 0; }
+.timeline-item::before { content: ""; position: absolute; left: -4px; top: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); border: 2px solid var(--panel); }
+.timeline-date { font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--ink-faint); margin-bottom: 3px; }
+.timeline-text { font-size: 12.5px; line-height: 1.6; color: var(--ink-soft); }
+
+/* Sub-task children list (§6.5) - a parent folder's Details tab, above the
+   timeline: reuses table.detail's own row idiom rather than a third list
+   style, since it's the same "label, then value" shape. */
+.subtask-list { display: flex; flex-direction: column; }
+.subtask-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); background: none; border-left: none; border-right: none; border-top: none; text-align: left; cursor: pointer; font: inherit; color: inherit; width: 100%; }
+.subtask-row:last-child { border-bottom: none; }
+.subtask-row:hover .subtask-name { color: var(--add); }
+.subtask-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.subtask-goal { font-size: 11.5px; color: var(--ink-faint); flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Docs tab (PRD §6.6): GitLab's own file-browser layout, per the request -
+   a persistent left sidebar (file tree) beside a main content pane, not a
+   stacked list-then-content. Desktop only: at the 900px breakpoint below,
+   the sidebar collapses into a dropdown (reusing .dropdown-wrap/-btn/-menu
+   verbatim - InstallScopeRow's own component, not a second one) above a
+   full-width main pane, since there's no room for two columns at that size. */
+.docs-layout { display: flex; align-items: stretch; width: 100%; }
+.docs-sidebar { width: 208px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 18px 12px 18px 24px; overflow: auto; }
+.docs-sidebar-path { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); padding: 0 8px 10px; }
+.docs-sidebar-path b { color: var(--ink-soft); font-weight: 600; }
+.docs-file-list { display: flex; flex-direction: column; }
+.docs-file { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; text-decoration: none; color: inherit; cursor: pointer; background: none; border: none; text-align: left; font: inherit; width: 100%; }
+.docs-file:hover { background: var(--panel-sunken); }
+.docs-file.active { background: var(--add-bg); }
+.docs-file.active .doc-name { color: var(--add); }
+.doc-icon { width: 14px; height: 14px; color: var(--ink-faint); flex-shrink: 0; }
+.doc-name { font-size: 12.5px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-main { flex-grow: 1; min-width: 0; padding: 18px 24px; overflow: auto; }
+.docs-main-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border-soft); }
+.docs-main-title { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.docs-main-meta { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); white-space: nowrap; }
+.docs-main-empty { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 220px; font-size: 12.5px; color: var(--ink-faint); }
+.docs-mobile-picker { display: none; margin-bottom: 16px; }
+.doc-render h1, .doc-render h2, .doc-render h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin: 20px 0 8px; }
+.doc-render h1:first-child, .doc-render h2:first-child, .doc-render h3:first-child { margin-top: 0; }
+.doc-render p, .doc-render li { font-size: 12.5px; line-height: 1.65; color: var(--ink-soft); margin: 0 0 10px; }
+.doc-render code { font-family: var(--mono); font-size: 11.5px; background: var(--border-soft); border-radius: 3px; padding: 1px 5px; color: var(--ink); }
+
 @media (max-width: 900px) {
   .grid, .grid-2, .drill-grid { grid-template-columns: 1fr; }
   .shell { padding: 16px 16px 36px; }
@@ -476,4 +572,13 @@ table.sessions a.sess:hover { text-decoration: underline; }
   nav.app-tabs { display: none; }
   .dropdown-btn.nav-dropdown { display: flex; }
   .kanban-columns { grid-template-columns: 1fr; }
+  .drawer { width: 100%; border-left: none; }
+  .drawer-body { max-width: none; }
+  /* Docs tab: no room for a persistent sidebar, so it collapses into the
+     same dropdown-btn/dropdown-menu InstallScopeRow already uses - not a
+     second dropdown component - above a full-width main pane. */
+  .docs-layout { flex-direction: column; }
+  .docs-sidebar { display: none; }
+  .docs-main { padding: 18px 20px; }
+  .docs-mobile-picker { display: block; padding: 18px 20px 0; }
 }

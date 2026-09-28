@@ -8,6 +8,11 @@ interface TaskCardProps {
   // Project column is (S2) - every card already belongs to the one known
   // project, so the tag would be redundant noise on every card.
   showProject: boolean;
+  // Opens the detail drawer (../04-frontend-drawer-docs/'s own build) on
+  // this card's own folder - optional so a caller with no drawer yet (there
+  // is none left in this app) can still render a plain, non-interactive
+  // card, matching this component's pre-drawer behavior exactly.
+  onClick?: () => void;
 }
 
 // `.kcard` per `board-single-project.html`/`board-multi-project.html` -
@@ -18,12 +23,17 @@ interface TaskCardProps {
 // parent", but the drawer it would open (§6.5) is `../04-frontend-drawer-
 // docs/`'s own build, not yet real - a clickable link to nowhere would be
 // worse than an honest, static label for now.
-export function TaskCard({ task, showProject }: TaskCardProps) {
+export function TaskCard({ task, showProject, onClick }: TaskCardProps) {
   const subTasks = task.sub_tasks;
   const progressPct = subTasks && subTasks.total > 0 ? Math.round((subTasks.done / subTasks.total) * 100) : 0;
 
   return (
-    <div className="kcard" data-testid={`task-card-${task.folder}`}>
+    <div
+      className="kcard"
+      data-testid={`task-card-${task.folder}`}
+      onClick={onClick}
+      style={onClick ? { cursor: "pointer" } : undefined}
+    >
       <div className="kcard-top">
         <span className="kcard-kind">{task.kind}</span>
         {showProject && <span className="kcard-project">{task.project}</span>}
