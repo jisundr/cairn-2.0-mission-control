@@ -237,6 +237,36 @@ describe("Kanban", () => {
     expect(onBoardProjectChange).toHaveBeenCalledWith(undefined);
   });
 
+  it("pages a column's cards behind a manual See more control, and shows the end marker once exhausted", async () => {
+    const tasks = Array.from({ length: 25 }, (_, i) =>
+      task({ folder: `docs/tasks/2026-09-01-0900-ready-${i}`, column: "ready" }),
+    );
+    install(tasks);
+    renderKanban();
+
+    await waitFor(() => expect(screen.getByTestId(`task-card-${tasks[0].folder}`)).toBeInTheDocument());
+    expect(screen.queryByTestId(`task-card-${tasks[20].folder}`)).not.toBeInTheDocument();
+    const seeMore = screen.getByTestId("kanban-see-more-ready");
+    expect(seeMore).toHaveTextContent("See more");
+
+    fireEvent.click(seeMore);
+
+    for (const t of tasks) {
+      expect(screen.getByTestId(`task-card-${t.folder}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId("kanban-see-more-ready")).not.toBeInTheDocument();
+    expect(screen.getByTestId("kanban-end-ready")).toHaveTextContent("End of Ready");
+  });
+
+  it("shows the end marker on a column with no cards, without triggering the board's own all-empty state", async () => {
+    install([task({ folder: "docs/tasks/2026-09-01-0900-ready-one", column: "ready" })]);
+    renderKanban();
+
+    await waitFor(() => expect(screen.getByTestId("kanban-end-done")).toBeInTheDocument());
+    expect(screen.getByTestId("kanban-end-done")).toHaveTextContent("End of Done");
+    expect(screen.queryByTestId("kanban-see-more-done")).not.toBeInTheDocument();
+  });
+
   it("shows an error state with retry when /api/tasks fails", async () => {
     const fetchMock = installFetchMock({
       "/api/projects": () => envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }),

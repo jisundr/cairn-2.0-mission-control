@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useProjects, useTasks } from "../api/hooks";
 import type { TaskCard as TaskCardData, TaskColumn } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
@@ -38,6 +39,10 @@ const COLUMNS: { key: TaskColumn; title: string }[] = [
   { key: "done", title: "Done" },
 ];
 
+// Cards page behind a manual "See more" click (§ REQUIREMENTS.md Goals) - a
+// fixed, implementation-chosen page size, not derived from the API.
+const PAGE_SIZE = 20;
+
 // pages/Kanban.tsx per `board-single-project.html`/`board-multi-project.
 // html`/`board-empty.html`/`board-error.html` (PRD §6.1-§6.4) - fetches the
 // flat `/api/tasks` list and groups it into 4 columns client-side, same
@@ -67,6 +72,17 @@ export function Kanban({
   const drawerProject = openTask
     ? (openTaskProject ?? allTasks.data?.find((t) => t.folder === openTask)?.project ?? null)
     : null;
+
+  // How many cards each column currently shows, reset to the first page
+  // when the board's project filter changes (see `kanban-columns`'s own
+  // `key` below - the same remount-to-reset pattern `TaskDrawer` already
+  // uses on a folder/project change).
+  const [shown, setShown] = useState<Record<TaskColumn, number>>({
+    ready: PAGE_SIZE,
+    needs_attention: PAGE_SIZE,
+    ongoing: PAGE_SIZE,
+    done: PAGE_SIZE,
+  });
 
   const grouped: Record<TaskColumn, TaskCardData[]> = {
     ready: [],
@@ -121,7 +137,7 @@ export function Kanban({
           }
         />
       ) : (
-        <div className="kanban-columns">
+        <div className="kanban-columns" key={boardProject ?? "__all__"}>
           {COLUMNS.map((col) => (
             <div key={col.key}>
               <div className="kanban-column-head">
@@ -129,7 +145,7 @@ export function Kanban({
                 <span className="kanban-column-count">{grouped[col.key].length}</span>
               </div>
               <div className="kanban-column-cards">
-                {grouped[col.key].map((t) => (
+                {grouped[col.key].slice(0, shown[col.key]).map((t) => (
                   <TaskCard
                     key={`${t.project}::${t.folder}`}
                     task={t}
@@ -137,6 +153,19 @@ export function Kanban({
                     onClick={(project, folder) => onOpenTask(folder, "details", project)}
                   />
                 ))}
+                {grouped[col.key].length > shown[col.key] ? (
+                  <button
+                    className="btn-block"
+                    onClick={() => setShown((prev) => ({ ...prev, [col.key]: prev[col.key] + PAGE_SIZE }))}
+                    data-testid={`kanban-see-more-${col.key}`}
+                  >
+                    See more
+                  </button>
+                ) : (
+                  <div className="kanban-column-end" data-testid={`kanban-end-${col.key}`}>
+                    End of {col.title}
+                  </div>
+                )}
               </div>
             </div>
           ))}
