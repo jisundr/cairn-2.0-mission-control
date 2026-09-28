@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   useAgentRollup,
   useDayDetail,
@@ -34,6 +34,42 @@ type OverviewView = "trend" | "calendar";
 
 const VIEW_RANGE: Record<OverviewView, RangeKey> = { trend: "30d", calendar: "13w" };
 const VIEW_LABEL: Record<OverviewView, string> = { trend: "Last 30 days", calendar: "Last 13 weeks" };
+
+// Reloading the page used to always land back on Trend (and lose the
+// project filter / drilled-into day), even with one of them set - all three
+// now round-trip through `?view=&project=&date=` query params (same
+// hand-rolled window.location/history convention App.tsx uses for its own
+// path-based routing, kept local to this in-page toggle instead).
+function viewFromSearch(search: string): OverviewView {
+  const param = new URLSearchParams(search).get("view");
+  return param === "calendar" ? "calendar" : "trend";
+}
+
+function projectFromSearch(search: string): string | undefined {
+  return new URLSearchParams(search).get("project") ?? undefined;
+}
+
+// Only a plausible YYYY-MM-DD is trusted from the URL - anything else (a
+// missing param, hand-edited garbage) falls back to "no day selected"
+// rather than passing through and confusing useDayDetail/sessionOverlapsDate
+// downstream, both of which assume this exact shape.
+function dateFromSearch(search: string): string | null {
+  const param = new URLSearchParams(search).get("date");
+  return param && /^\d{4}-\d{2}-\d{2}$/.test(param) ? param : null;
+}
+
+// Shared write side for all three URL-persisted toggles below - reads the
+// current URL fresh each call and only touches the key(s) passed in, so
+// e.g. picking a project never clobbers an already-set view or date.
+function updateSearchParams(updates: Record<string, string | undefined>) {
+  const params = new URLSearchParams(window.location.search);
+  for (const [key, value] of Object.entries(updates)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  const query = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+}
 
 // O2: a session "falls on" a selected day if its [started, ended) window
 // overlaps that UTC calendar day at all - a session spanning midnight
@@ -86,8 +122,33 @@ interface OverviewProps {
 }
 
 export function Overview({ activeTab, onTabChange }: OverviewProps) {
-  const [view, setView] = useState<OverviewView>("trend");
-  const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
+  const [view, setView] = useState<OverviewView>(() => viewFromSearch(window.location.search));
+  const [projectFilter, setProjectFilter] = useState<string | undefined>(() => projectFromSearch(window.location.search));
+  // O2's own drilled-into day, lifted up from OverviewLoaded so its value can
+  // live in the same `?date=` query param as view/project below - still
+  // reset to null whenever the view or project filter changes (a selected
+  // date from a 30-day Trend window has no meaning once the window itself
+  // changes shape or scope), just via these two handlers instead of an
+  // effect keyed on [view, projectFilter], since that would also fire (and
+  // wipe out a `?date=` restored from the URL) on the very first mount.
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => dateFromSearch(window.location.search));
+
+  function handleViewChange(next: OverviewView) {
+    setView(next);
+    setSelectedDate(null);
+    updateSearchParams({ view: next, date: undefined });
+  }
+
+  function handleProjectFilterChange(next: string | undefined) {
+    setProjectFilter(next);
+    setSelectedDate(null);
+    updateSearchParams({ project: next, date: undefined });
+  }
+
+  function handleSelectedDateChange(next: string | null) {
+    setSelectedDate(next);
+    updateSearchParams({ date: next ?? undefined });
+  }
 
   const projects = useProjects();
   const hostTag = projects.data?.hostname ?? "localhost";
@@ -149,9 +210,11 @@ export function Overview({ activeTab, onTabChange }: OverviewProps) {
       hostTag={hostTag}
       projects={projects.data?.projects ?? []}
       view={view}
-      onViewChange={setView}
+      onViewChange={handleViewChange}
       projectFilter={projectFilter}
-      onProjectFilterChange={setProjectFilter}
+      onProjectFilterChange={handleProjectFilterChange}
+      selectedDate={selectedDate}
+      onSelectedDateChange={handleSelectedDateChange}
     />
   );
 }
@@ -165,6 +228,8 @@ interface OverviewLoadedProps {
   onViewChange: (view: OverviewView) => void;
   projectFilter: string | undefined;
   onProjectFilterChange: (project: string | undefined) => void;
+  selectedDate: string | null;
+  onSelectedDateChange: (date: string | null) => void;
 }
 
 function OverviewLoaded({
@@ -176,6 +241,8 @@ function OverviewLoaded({
   onViewChange,
   projectFilter,
   onProjectFilterChange,
+  selectedDate,
+  onSelectedDateChange,
 }: OverviewLoadedProps) {
   const range = VIEW_RANGE[view];
   const timeseries = useTimeseries({ range, project: projectFilter });
@@ -190,13 +257,9 @@ function OverviewLoaded({
   // same `range` every other rollup on this page uses.
   const usageLimitEvents = useUsageLimitEvents({ range, project: projectFilter });
 
-  // O2: click-to-drill-into-a-day. Reset whenever the view or project
-  // filter changes - a selected date from a 30-day Trend window has no
-  // meaning once the window itself changes shape (13w) or scope.
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  useEffect(() => {
-    setSelectedDate(null);
-  }, [view, projectFilter]);
+  // O2: click-to-drill-into-a-day. `selectedDate` itself (and its reset on
+  // view/project-filter change) now lives in the parent Overview component,
+  // alongside view/projectFilter, so all three can share one URL-sync spot.
   const dayDetail = useDayDetail(selectedDate, projectFilter);
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -284,7 +347,7 @@ function OverviewLoaded({
         selectedProject={projectFilter}
         onSelectProject={onProjectFilterChange}
         selectedDate={selectedDate}
-        onClearDate={() => setSelectedDate(null)}
+        onClearDate={() => onSelectedDateChange(null)}
       />
 
       <div className="grid grid-2" style={{ marginBottom: 16 }}>
@@ -303,9 +366,9 @@ function OverviewLoaded({
             </div>
           ) : timeseries.data ? (
             view === "trend" ? (
-              <TokensPerDayChart timeseries={timeseries.data} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+              <TokensPerDayChart timeseries={timeseries.data} selectedDate={selectedDate} onSelectDate={onSelectedDateChange} />
             ) : (
-              <ContributionCalendar points={timeseries.data.points} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+              <ContributionCalendar points={timeseries.data.points} selectedDate={selectedDate} onSelectDate={onSelectedDateChange} />
             )
           ) : (
             <div className="skel" style={{ height: 150 }} />

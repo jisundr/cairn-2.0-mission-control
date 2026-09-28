@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { SessionSummary, Timeseries } from "../api/types";
 import { envelope, installFetchMock, serverError } from "../test/mockApi";
 import { renderWithClient } from "../test/renderWithClient";
@@ -78,6 +78,12 @@ function baseHandlers(overrides: Record<string, ReturnType<typeof envelope> | { 
 }
 
 describe("Overview", () => {
+  // A `?view=` query param set by an earlier test in this file would
+  // otherwise leak into the next one's initial read.
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
   it("shows the disconnected state and a retry when /api/projects fails", async () => {
     installFetchMock(baseHandlers({ "/api/projects": serverError() }));
     renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
@@ -239,6 +245,67 @@ describe("Overview", () => {
     fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
     await waitFor(() => expect(screen.getByTestId("project-row-cairn-2.0")).toHaveTextContent("$12.40"));
     expect(screen.queryByTestId("project-row-wardstone")).not.toBeInTheDocument();
+  });
+
+  it("loads with ?view=calendar in the URL and renders the Calendar view, not Trend", async () => {
+    window.history.pushState(null, "", "/?view=calendar");
+    installFetchMock(baseHandlers());
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
+
+    expect(await screen.findByTestId("contribution-calendar")).toBeInTheDocument();
+    expect(screen.queryByTestId("chart-bars")).not.toBeInTheDocument();
+  });
+
+  it("updates the URL's view param when the other segment is clicked", async () => {
+    installFetchMock(baseHandlers());
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("chart-bars")).toBeInTheDocument());
+    expect(new URLSearchParams(window.location.search).get("view")).not.toBe("calendar");
+
+    fireEvent.click(screen.getByTestId("view-seg-calendar"));
+
+    await waitFor(() => expect(screen.getByTestId("contribution-calendar")).toBeInTheDocument());
+    expect(new URLSearchParams(window.location.search).get("view")).toBe("calendar");
+  });
+
+  const MULTI_PROJECT_HANDLERS = {
+    "/api/projects": envelope({
+      hostname: "test-host",
+      projects: [
+        { label: "cairn-2.0", parent: null },
+        { label: "wardstone", parent: null },
+      ],
+    }),
+  };
+
+  it("loads with ?view=calendar&project=wardstone&date=2026-09-25 and restores all three", async () => {
+    window.history.pushState(null, "", "/?view=calendar&project=wardstone&date=2026-09-25");
+    installFetchMock(baseHandlers(MULTI_PROJECT_HANDLERS));
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
+
+    expect(await screen.findByTestId("contribution-calendar")).toBeInTheDocument();
+    expect(screen.getByTestId("install-scope-chip")).toHaveTextContent("Project: wardstone");
+    expect(screen.getByTestId("install-scope-date-chip")).toHaveTextContent("Date: 2026-09-25");
+    // Restored `date` drills the Breakdown into day-detail's own seeded
+    // total ($12.40) rather than the range rollup's ($41.10).
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$12.40"));
+  });
+
+  it("clearing the selected-day chip updates only the URL's date param, leaving view/project alone", async () => {
+    window.history.pushState(null, "", "/?view=calendar&project=wardstone&date=2026-09-25");
+    installFetchMock(baseHandlers(MULTI_PROJECT_HANDLERS));
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("install-scope-date-chip")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle("Clear selected day"));
+
+    await waitFor(() => expect(screen.queryByTestId("install-scope-date-chip")).not.toBeInTheDocument());
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("date")).toBeNull();
+    expect(params.get("view")).toBe("calendar");
+    expect(params.get("project")).toBe("wardstone");
   });
 
   it("O2: switching views clears the selected day", async () => {
