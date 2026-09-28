@@ -37,7 +37,7 @@ def unpriced_models(roots: list[Path], prices: dict | None = None) -> set[str]:
     """Models in any root's `tokens.db` that are not keys of `prices`.
     A root with no db yet is skipped; one root's failure doesn't abort the rest.
     """
-    prices = pricing.PRICES if prices is None else prices
+    prices = pricing.current_prices() if prices is None else prices
     missing: set[str] = set()
     for root in roots:
         cairn_dir = Path(root) / ".cairn"

@@ -156,3 +156,47 @@ def test_call_cost_partial_rate_set_with_zero_on_missing_field_still_unknown():
     row = make_call(model="claude-partial-model", cache_write_1h_tokens=0)
 
     assert pricing.call_cost(row, prices=partial_prices) == "unknown"
+
+
+def _write_prices(path, rate, mtime):
+    import json
+    import os
+
+    path.write_text(json.dumps({"m": dict(
+        input=rate, output=0, cache_read=0, cache_write_5m=0, cache_write_1h=0)}))
+    os.utime(path, (mtime, mtime))
+
+
+def test_default_table_reloads_when_prices_file_changes(tmp_path, monkeypatch):
+    f = tmp_path / "prices.json"
+    monkeypatch.setattr(pricing, "prices_path", lambda: f)
+    row = make_call(model="m", output_tokens=0)
+    _write_prices(f, 1.0, 1_000_000)
+    assert pricing.call_cost(row) == 1.0
+    _write_prices(f, 3.0, 1_000_100)
+    assert pricing.call_cost(row) == 3.0
+    assert pricing.group_cost([row]) == 3.0
+
+
+def test_corrupt_rewrite_keeps_previous_table_without_raising(tmp_path, monkeypatch):
+    f = tmp_path / "prices.json"
+    monkeypatch.setattr(pricing, "prices_path", lambda: f)
+    row = make_call(model="m", output_tokens=0)
+    _write_prices(f, 2.0, 2_000_000)
+    assert pricing.call_cost(row) == 2.0
+    for bad in ("{not json", "[1, 2]", '{"m": 5}'):
+        f.write_text(bad)
+        import os
+        os.utime(f, (2_000_000 + len(bad), 2_000_000 + len(bad)))
+        assert pricing.call_cost(row) == 2.0
+
+
+def test_explicit_prices_argument_wins_over_file(tmp_path, monkeypatch):
+    f = tmp_path / "prices.json"
+    monkeypatch.setattr(pricing, "prices_path", lambda: f)
+    _write_prices(f, 5.0, 3_000_000)
+    row = make_call(model="m", output_tokens=0)
+    explicit = {"m": dict(input=7.0, output=0, cache_read=0,
+                          cache_write_5m=0, cache_write_1h=0)}
+    assert pricing.call_cost(row, prices=explicit) == 7.0
+    assert pricing.group_cost([row], prices=explicit) == 7.0

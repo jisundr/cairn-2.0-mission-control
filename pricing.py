@@ -17,7 +17,11 @@ Usage:
     pricing.group_cost(rows)   # float, or None if any row is unpriced
 """
 import json
+import logging
+import os
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 PRICES_FILENAME = "prices.json"
 
@@ -42,15 +46,49 @@ def load_prices(path: Path | None = None) -> dict:
         return json.load(f)
 
 
-# Loaded once at import time — read-time lookup, not baked into any row.
-PRICES = load_prices()
+# Cached table plus the (mtime_ns, size) it was parsed from. A running server
+# sees prices.json edits because the default table is resolved per call.
+_cache: dict = {"path": None, "stamp": None, "table": None}
 
 
-def call_cost(row, prices: dict = PRICES):
+def current_prices(path: Path | None = None) -> dict:
+    """The table in `prices.json`, re-parsed only when the file's mtime or
+    size changes. A missing/invalid/wrong-shaped file keeps the last good
+    table (logging a warning); it never raises. Raises only if the very
+    first load has no good table to fall back on.
+    """
+    path = Path(path or prices_path())
+    try:
+        st = path.stat()
+        stamp = (st.st_mtime_ns, st.st_size)
+    except OSError as e:
+        log.warning("prices file unreadable, keeping last good table: %s", e)
+        stamp = None
+    same_file = _cache["path"] == path
+    if stamp is not None and not (same_file and _cache["stamp"] == stamp):
+        try:
+            table = load_prices(path)
+            if not isinstance(table, dict) or not all(
+                isinstance(v, dict) for v in table.values()
+            ):
+                raise ValueError("prices must be an object of model -> rates object")
+            _cache.update(path=path, stamp=stamp, table=table)
+        except (OSError, ValueError) as e:
+            log.warning("invalid prices file, keeping last good table: %s", e)
+            if same_file:
+                _cache["stamp"] = stamp  # don't re-warn until it changes again
+    if _cache["table"] is None or _cache["path"] != path:
+        raise RuntimeError(f"no valid prices table at {path}")
+    return _cache["table"]
+
+
+def call_cost(row, prices: dict | None = None):
     """Cost in dollars for one `calls`-shaped row, or the string "unknown"
     if `row["model"]` isn't in `prices`, or is in `prices` but missing a
     rate key that this row's nonzero token fields need.
     """
+    if prices is None:
+        prices = current_prices()
     rates = prices.get(row["model"])
     if rates is None:
         return UNKNOWN
@@ -66,11 +104,13 @@ def call_cost(row, prices: dict = PRICES):
     return total_cents_per_mtok / 1_000_000
 
 
-def group_cost(rows, prices: dict = PRICES):
+def group_cost(rows, prices: dict | None = None):
     """Total cost in dollars for an iterable of `calls`-shaped rows, or None
     if any row's model is unpriced — never a partial sum over the priced
     rows only.
     """
+    if prices is None:
+        prices = current_prices()
     total = 0.0
     for row in rows:
         cost = call_cost(row, prices=prices)
