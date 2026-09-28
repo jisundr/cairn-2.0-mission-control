@@ -76,6 +76,14 @@ describe("TaskDrawer", () => {
     expect(document.querySelectorAll(".timeline-item")).toHaveLength(0);
   });
 
+  it("shows an explicit empty state for a non-null, zero-length activity log", async () => {
+    renderDrawer(detail({ activity: [] }));
+
+    await waitFor(() => expect(screen.getByTestId("timeline-empty")).toBeInTheDocument());
+    expect(screen.getByTestId("timeline-empty")).toHaveTextContent("No activity yet.");
+    expect(document.querySelectorAll(".timeline-item")).toHaveLength(0);
+  });
+
   it("lists a parent's direct sub-task children above the timeline, each re-opening the drawer on click", async () => {
     const onOpenTask = vi.fn();
     const fetchMock = installDetail(

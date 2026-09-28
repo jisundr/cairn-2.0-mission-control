@@ -272,7 +272,15 @@ function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (proje
 
       <div className="drawer-section">
         <div className="drawer-section-title">{data.activity !== null ? "Activity" : "Draft"}</div>
-        {data.activity !== null ? (
+        {data.activity === null ? (
+          <div className="timeline-text" style={{ whiteSpace: "pre-wrap" }}>
+            {data.draft_content}
+          </div>
+        ) : data.activity.length === 0 ? (
+          <div className="timeline-empty" data-testid="timeline-empty">
+            No activity yet.
+          </div>
+        ) : (
           <div className="timeline">
             {data.activity.map((entry, i) => (
               <div className="timeline-item" key={`${entry.date}-${i}`}>
@@ -280,10 +288,6 @@ function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (proje
                 <div className="timeline-text">{entry.text}</div>
               </div>
             ))}
-          </div>
-        ) : (
-          <div className="timeline-text" style={{ whiteSpace: "pre-wrap" }}>
-            {data.draft_content}
           </div>
         )}
       </div>
