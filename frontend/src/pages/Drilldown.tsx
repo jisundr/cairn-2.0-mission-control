@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { useCallDetails, useProjects, useSessionTrace } from "../api/hooks";
 import type { AgentTrace, CallDetail, TraceCall } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
-import { HbarList, type HbarRow } from "../components/HbarList";
 import { InfoDot, isUnknownCost } from "../components/InfoDot";
 import { Panel, PanelTitle } from "../components/Panel";
 import { PanelError } from "../components/PanelError";
-import { formatCost, formatSessionDuration, shortId } from "../lib/format";
+import { StackedBarPanel, type StackedBarRow } from "../components/StackedBarPanel";
+import { formatCost, formatSessionDuration, formatTokens, shortId } from "../lib/format";
 
 interface DrilldownProps {
   sessionId: string;
@@ -229,11 +229,10 @@ export function Drilldown({ sessionId, activeTab, onTabChange, onBack }: Drilldo
       <div className="drill-grid">
         <Panel>
           <PanelTitle>Agents in this session</PanelTitle>
-          <HbarList
+          <StackedBarPanel
             data-testid="agents-in-session"
-            rows={agentRows(trace.agents, totalTokens)}
-            maxRows={trace.agents.length}
-            rowTestId={(r: HbarRow) => `agent-row-${r.label}`}
+            rows={agentRows(trace.agents)}
+            rowTestId={(r) => `agent-row-${r.key}`}
             emptyText="No agents in this session."
           />
         </Panel>
@@ -263,22 +262,18 @@ export function Drilldown({ sessionId, activeTab, onTabChange, onBack }: Drilldo
   );
 }
 
-// Feeds Drilldown's "Agents in this session" panel into HbarList (goal 5) -
-// composing the already-rebuilt component rather than a fourth hand-rolled
-// bar-chart implementation, per the build plan's note that this panel's
-// rebuild (no click-to-filter, no expand/collapse) is simpler than either
-// HbarList's or ProjectCostPanel's own. `pct` is the same
-// tokens-share-of-session calculation the deleted AgentRow used.
-function agentRows(agents: AgentTrace[], totalTokens: number): HbarRow[] {
-  return agents.map((agent) => {
-    const pct = totalTokens > 0 ? Math.round((agent.tokens / totalTokens) * 100) : 0;
-    return {
-      label: agent.agent ?? "unknown",
-      value: pct,
-      display: `${pct}% · ${formatCost(agent.cost)}`,
-      unknown: isUnknownCost(agent.cost),
-    };
-  });
+// Feeds Drilldown's "Agents in this session" panel into StackedBarPanel,
+// matching Overview's By-models/By-agents panels (which moved from HbarList
+// to StackedBarPanel during the dashboard revamp) rather than the row-capped
+// HbarList this panel used before - same shape as Overview.tsx's
+// costTokenRows helper.
+function agentRows(agents: AgentTrace[]): StackedBarRow[] {
+  return agents.map((agent) => ({
+    key: agent.agent ?? "unknown",
+    value: agent.tokens,
+    display: `${formatCost(agent.cost)} (${formatTokens(agent.tokens)})`,
+    unknown: isUnknownCost(agent.cost),
+  }));
 }
 
 function ChatTurn({ sessionId, turn }: { sessionId: string; turn: Turn }) {
