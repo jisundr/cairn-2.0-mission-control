@@ -481,6 +481,13 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .drawer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 32px); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px rgba(30, 30, 30, 0.24); z-index: 21; display: flex; flex-direction: column; overflow: hidden; }
 .drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid var(--border); }
 .drawer-title { font-size: 16px; font-weight: 700; color: var(--ink); line-height: 1.3; margin-bottom: 7px; }
+/* Kind/column badge row - now also holds the parent link and sub-task
+   count when applicable (§6.7's header enhancement), so it wraps rather
+   than the old single-line inline style, which never needed to. */
+.drawer-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.drawer-parent-link { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink-faint); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.drawer-parent-link:hover { color: var(--ink); }
+.drawer-subtask-count { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink-faint); }
 .drawer-close { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--ink-soft); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 .drawer-close:hover { border-color: var(--ink-soft); color: var(--ink); background: var(--panel-sunken); }
 .drawer-tabs { display: flex; gap: 22px; padding: 0 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }

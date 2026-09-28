@@ -170,4 +170,54 @@ describe("TaskDrawer", () => {
     await waitFor(() => expect(screen.getByText("Ship the kanban board.")).toBeInTheDocument());
     expect(screen.queryByTestId("reply-composer")).not.toBeInTheDocument();
   });
+
+  it("shows a parent link in the header when the task has one, re-opening the drawer on click", async () => {
+    const onOpenTask = vi.fn();
+    const fetchMock = installDetail(detail({ parent: "docs/tasks/2026-09-28-1000-build-kanban-parent" }));
+    renderWithClient(
+      <TaskDrawer
+        project="cairn-2.0"
+        folder="docs/tasks/2026-09-28-1345-build-kanban-board"
+        tab="details"
+        onClose={noop}
+        onTabChange={noop}
+        onOpenTask={onOpenTask}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("drawer-parent-link")).toBeInTheDocument());
+    expect(screen.getByTestId("drawer-parent-link")).toHaveTextContent("build-kanban-parent");
+    fireEvent.click(screen.getByTestId("drawer-parent-link"));
+    expect(onOpenTask).toHaveBeenCalledWith("cairn-2.0", "docs/tasks/2026-09-28-1000-build-kanban-parent");
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("shows a pluralized sub-task count in the header when the task has children", async () => {
+    renderDrawer(
+      detail({
+        sub_tasks: [
+          { folder: "docs/tasks/parent/01-first", column: "done", goal: "First" },
+          { folder: "docs/tasks/parent/02-second", column: "ready", goal: "Second" },
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByTestId("drawer-subtask-count")).toBeInTheDocument());
+    expect(screen.getByTestId("drawer-subtask-count")).toHaveTextContent("2 sub-tasks");
+  });
+
+  it("shows a singular sub-task count for exactly one child", async () => {
+    renderDrawer(detail({ sub_tasks: [{ folder: "docs/tasks/parent/01-first", column: "done", goal: "First" }] }));
+
+    await waitFor(() => expect(screen.getByTestId("drawer-subtask-count")).toBeInTheDocument());
+    expect(screen.getByTestId("drawer-subtask-count")).toHaveTextContent("1 sub-task");
+  });
+
+  it("renders neither the parent link nor the sub-task count when the task has no parent and no children", async () => {
+    renderDrawer(detail());
+
+    await waitFor(() => expect(screen.getByText("Ship the kanban board.")).toBeInTheDocument());
+    expect(screen.queryByTestId("drawer-parent-link")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("drawer-subtask-count")).not.toBeInTheDocument();
+  });
 });

@@ -35,9 +35,24 @@ export function TaskDrawer({ project, folder, tab, onClose, onTabChange, onOpenT
           <div>
             <div className="drawer-title">{taskDisplayName(folder)}</div>
             {data && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className="drawer-badges">
                 <span className="kcard-kind">{data.kind}</span>
                 <ColumnBadge column={data.column} />
+                {data.parent && (
+                  <button
+                    type="button"
+                    className="drawer-parent-link"
+                    data-testid="drawer-parent-link"
+                    onClick={() => onOpenTask(data.project, data.parent!)}
+                  >
+                    {taskDisplayName(data.parent)}
+                  </button>
+                )}
+                {data.sub_tasks && data.sub_tasks.length > 0 && (
+                  <span className="drawer-subtask-count" data-testid="drawer-subtask-count">
+                    {data.sub_tasks.length} sub-task{data.sub_tasks.length === 1 ? "" : "s"}
+                  </span>
+                )}
               </div>
             )}
           </div>
