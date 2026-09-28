@@ -673,6 +673,46 @@ def _open_readonly(db_path: Path, table: str) -> sqlite3.Connection | None:
 _DISCOVERY_CACHE_TTL_SECONDS = 5
 
 
+# --------------------------------------------------------------------------
+# Task detail/doc path safety (PRD §6.6, §9) - the drawer's two new routes
+# each take a client-supplied relative path; both guards below follow
+# `_safe_static_path`'s own resolve-and-`relative_to` pattern (below, in the
+# HTTP section), scoped to a task folder instead of `static_dir`.
+# --------------------------------------------------------------------------
+
+
+def _resolve_task_folder(project: "Project", folder: str) -> Path | None:
+    """The client-supplied, project-root-relative `folder` path, resolved
+    and guarded to stay under that project's own `docs/tasks/` - refuses
+    (returns `None`) a `folder` that resolves outside it, or that isn't a
+    real directory, rather than degrading to a partial or wrong read."""
+    if not folder:
+        return None
+    tasks_root = (project.root / "docs" / "tasks").resolve()
+    candidate = (project.root / folder).resolve()
+    try:
+        candidate.relative_to(tasks_root)
+    except ValueError:
+        return None
+    return candidate if candidate.is_dir() else None
+
+
+def _safe_task_doc_path(folder_dir: Path, file_name: str) -> Path | None:
+    """`file_name` resolved as a direct child of the already-resolved
+    `folder_dir` - `.md` extension only, no escaping via `..`/`/` in the
+    name itself (§6.6/§11). Refuses, rather than degrades, anything else."""
+    if not file_name or not file_name.endswith(".md"):
+        return None
+    candidate = (folder_dir / file_name).resolve()
+    try:
+        candidate.relative_to(folder_dir.resolve())
+    except ValueError:
+        return None
+    if candidate.parent != folder_dir.resolve():
+        return None
+    return candidate
+
+
 class TokenMeteringApp:
     """Query layer, independent of HTTP. `handle_api` is the thin dispatch
     layer `Handler` (the socket-facing class below) delegates to.
@@ -893,6 +933,43 @@ class TokenMeteringApp:
         projects = _filter_projects(self.projects(), project_filter)
         return tasks.build_cards(projects, heartbeat_dir=self.heartbeat_dir, gh_cache=self._gh_pr_cache)
 
+    def _find_project(self, project_label: str | None) -> Project | None:
+        return next((p for p in self.projects() if p.label == project_label), None)
+
+    def task_detail(self, project_label: str | None, folder: str | None) -> dict | None:
+        """The detail drawer's payload (§6.5, §9's `GET /api/tasks/detail`)
+        for one folder - `None` (caller's 404) for an unknown project, or a
+        `folder` that doesn't resolve to a real task folder under that
+        project's own `docs/tasks/` (`_resolve_task_folder`'s guard)."""
+        project = self._find_project(project_label)
+        if project is None:
+            return None
+        folder_dir = _resolve_task_folder(project, folder or "")
+        if folder_dir is None:
+            return None
+        return tasks.build_detail(project, folder_dir, heartbeat_dir=self.heartbeat_dir, gh_cache=self._gh_pr_cache)
+
+    def task_doc(self, project_label: str | None, folder: str | None, file_name: str | None) -> dict | None:
+        """One task-folder doc's content (§6.6, §9's `GET /api/tasks/doc`) -
+        `None` (caller's 404) for an unknown project, a `folder` that
+        doesn't resolve under that project's `docs/tasks/`, or a `file_name`
+        that isn't a direct-child `.md` file of that folder
+        (`_safe_task_doc_path`'s guard) - refused, never partially served."""
+        project = self._find_project(project_label)
+        if project is None:
+            return None
+        folder_dir = _resolve_task_folder(project, folder or "")
+        if folder_dir is None:
+            return None
+        doc_path = _safe_task_doc_path(folder_dir, file_name or "")
+        if doc_path is None or not doc_path.is_file():
+            return None
+        try:
+            content = doc_path.read_text()
+        except OSError:
+            return None
+        return {"content": content}
+
     def sessions(self, range_key: str, project_filter: str | None = None) -> list[dict]:
         projects = _filter_projects(self.projects(), project_filter)
         since, until = range_bounds(range_key)
@@ -971,6 +1048,18 @@ class TokenMeteringApp:
 
         if path == "/api/tasks":
             return 200, self._envelope(self.tasks(project_filter=first("project")))
+
+        if path == "/api/tasks/detail":
+            data = self.task_detail(first("project"), first("folder"))
+            if data is None:
+                return 404, {"error": "task folder not found"}
+            return 200, self._envelope(data)
+
+        if path == "/api/tasks/doc":
+            data = self.task_doc(first("project"), first("folder"), first("file"))
+            if data is None:
+                return 404, {"error": "document not found"}
+            return 200, self._envelope(data)
 
         range_key = first("range", "7d")
         project_filter = first("project")

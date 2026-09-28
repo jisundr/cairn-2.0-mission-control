@@ -17,6 +17,7 @@ import re
 import subprocess
 import time
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 
 # A live session's heartbeat file is "active" only if its mtime is within
@@ -160,6 +161,35 @@ def _draft_summary(text: str) -> tuple[str, str]:
         return "", ""
     goal = non_empty[0].lstrip("#").strip()
     return goal, non_empty[-1]
+
+
+_ACTIVITY_START_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2}(?:/\d{2})?):?\s*")
+
+
+def parse_activity(text: str) -> list[dict]:
+    """`STATE.md`'s append-only log, after its frontmatter, split into one
+    timeline entry per `^- YYYY-MM-DD` line - a `YYYY-MM-DD/DD` date-range
+    prefix is also recognized, both forms being in real use in this repo's
+    own task folders (§6.5). Every real entry in this repo is written as
+    one dense line, never soft-wrapped, so an entry's text is exactly that
+    line's own content (after its `- YYYY-MM-DD:` prefix); a line matching
+    neither pattern - the `cairn:shared`-template blockquote that precedes
+    the first entry, a blank separator line, or hand-edited stray content -
+    is dropped outright rather than folded into whichever entry precedes
+    it, and never errors the whole parse (`pricing.py`/`parser.py`'s own
+    degrade-not-crash convention)."""
+    lines = text.splitlines()
+    bounds = _frontmatter_bounds(lines)
+    body_lines = lines[bounds[1] + 1 :] if bounds is not None else lines
+
+    entries: list[dict] = []
+    for line in body_lines:
+        match = _ACTIVITY_START_RE.match(line)
+        if match:
+            entries.append({"date": match.group(1), "text": line[match.end() :].strip()})
+        # else: dropped - either precedes the first entry (blockquote/blank)
+        # or is unparseable stray content, per §6.5.
+    return entries
 
 
 _FOLDER_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
@@ -369,6 +399,60 @@ def _active_heartbeats(heartbeat_dir: Path, now: float) -> set[tuple[str, str]]:
 # --------------------------------------------------------------------------
 
 
+def _card_fields(
+    folder_dir: Path,
+    source_path: Path,
+    project,
+    tasks_root: Path,
+    live_heartbeats: set[tuple[str, str]],
+    gh_cache: dict,
+    gh_ttl: float,
+) -> dict | None:
+    """One folder's `GET /api/tasks` card fields (everything but `sub_tasks`,
+    which `build_cards`/`build_detail` each compute their own way) - shared
+    by both, so a card's own facts (column precedence, `active`) are
+    computed identically whether it's rendered in the board's flat list or
+    as a parent's own sub-task-list entry in the detail drawer (§9).
+    `None` if `source_path` can't be read (degrade, not crash)."""
+    try:
+        text = source_path.read_text()
+    except OSError:
+        return None
+
+    relative_folder = folder_dir.relative_to(project.root).as_posix()
+    kind = _folder_kind(folder_dir.name)
+    parent = _parent_relpath(folder_dir, project.root)
+
+    if source_path.name == "DRAFT.md":
+        goal, key_info = _draft_summary(text)
+        last_log_date = _folder_name_date(folder_dir, tasks_root)
+    else:
+        frontmatter = parse_frontmatter(text)
+        goal = frontmatter.get("goal", "")
+        key_info = frontmatter.get("key_info", "")
+        goal = goal if isinstance(goal, str) else ""
+        key_info = key_info if isinstance(key_info, str) else ""
+        last_log_date = _last_log_date(text) or _folder_name_date(folder_dir, tasks_root)
+
+    needs_attention = _needs_attention_fact(key_info)
+    done = _done_fact(kind, key_info, folder_dir.name, project.root, gh_cache, gh_ttl)
+    active = (str(project.root), relative_folder) in live_heartbeats
+
+    return {
+        "project": project.label,
+        "folder": relative_folder,
+        "parent": parent,
+        "kind": kind,
+        "goal": goal,
+        "key_info": key_info,
+        "last_log_date": last_log_date,
+        "column": _column(needs_attention, done, active),
+        "active": active,
+        "needs_attention": needs_attention,
+        "done": done,
+    }
+
+
 def build_cards(
     projects: list,
     *,
@@ -393,45 +477,9 @@ def build_cards(
     for project in projects:
         tasks_root = project.root / "docs" / "tasks"
         for folder_dir, source_path in _iter_task_dirs(project.root):
-            try:
-                text = source_path.read_text()
-            except OSError:
-                continue
-
-            relative_folder = folder_dir.relative_to(project.root).as_posix()
-            kind = _folder_kind(folder_dir.name)
-            parent = _parent_relpath(folder_dir, project.root)
-
-            if source_path.name == "DRAFT.md":
-                goal, key_info = _draft_summary(text)
-                last_log_date = _folder_name_date(folder_dir, tasks_root)
-            else:
-                frontmatter = parse_frontmatter(text)
-                goal = frontmatter.get("goal", "")
-                key_info = frontmatter.get("key_info", "")
-                goal = goal if isinstance(goal, str) else ""
-                key_info = key_info if isinstance(key_info, str) else ""
-                last_log_date = _last_log_date(text) or _folder_name_date(folder_dir, tasks_root)
-
-            needs_attention = _needs_attention_fact(key_info)
-            done = _done_fact(kind, key_info, folder_dir.name, project.root, gh_cache, gh_ttl)
-            active = (str(project.root), relative_folder) in live_heartbeats
-
-            cards.append(
-                {
-                    "project": project.label,
-                    "folder": relative_folder,
-                    "parent": parent,
-                    "kind": kind,
-                    "goal": goal,
-                    "key_info": key_info,
-                    "last_log_date": last_log_date,
-                    "column": _column(needs_attention, done, active),
-                    "active": active,
-                    "needs_attention": needs_attention,
-                    "done": done,
-                }
-            )
+            card = _card_fields(folder_dir, source_path, project, tasks_root, live_heartbeats, gh_cache, gh_ttl)
+            if card is not None:
+                cards.append(card)
 
     # §6.4: direct-child count per parent, one level, done = children whose
     # own column is Done - scoped by project so two projects' folders that
@@ -449,3 +497,102 @@ def build_cards(
             card["sub_tasks"] = None
 
     return cards
+
+
+# --------------------------------------------------------------------------
+# Detail drawer assembly (§6.5, §6.6, §9's `GET /api/tasks/detail`)
+# --------------------------------------------------------------------------
+
+
+def _list_docs(folder_dir: Path) -> list[dict]:
+    """Every `*.md` file directly under `folder_dir` except `STATE.md`/
+    `DRAFT.md` (already covered by the Details tab), as name/byte-size/
+    mtime metadata only - never content (§6.6). Not recursive: a subfolder
+    of loose assets (`wireframes/`, `mockups/`) is never a "doc" and isn't
+    listed. `docs/tasks/` is gitignored per-project, so filesystem mtime -
+    not a git log - is the honest "last touched" signal here."""
+    docs: list[dict] = []
+    for path in sorted(folder_dir.glob("*.md")):
+        if path.name in ("STATE.md", "DRAFT.md") or not path.is_file():
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        docs.append(
+            {
+                "name": path.name,
+                "size": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d"),
+            }
+        )
+    return docs
+
+
+def build_detail(
+    project,
+    folder_dir: Path,
+    *,
+    heartbeat_dir: Path | None = None,
+    now: float | None = None,
+    gh_cache: dict | None = None,
+    gh_ttl: float = GH_CACHE_TTL_SECONDS,
+) -> dict | None:
+    """One folder's detail-drawer payload, shaped per `PRD.md` §9's second
+    JSON block (`GET /api/tasks/detail`): frontmatter plus the parsed
+    activity timeline, XOR (for a `DRAFT.md`-only `review` folder)
+    `draft_content` in its place (§6.5) - the full direct-child sub-task
+    list (folder/column/goal, unlike `build_cards`'s summary-only
+    `{done, total}`), and `docs` metadata (§6.6). `None` when `folder_dir`
+    holds neither a `STATE.md` nor a `DRAFT.md` - the caller's 404."""
+    state_path = folder_dir / "STATE.md"
+    draft_path = folder_dir / "DRAFT.md"
+    source_path = state_path if state_path.is_file() else draft_path if draft_path.is_file() else None
+    if source_path is None:
+        return None
+
+    heartbeat_dir = heartbeat_dir if heartbeat_dir is not None else DEFAULT_HEARTBEAT_DIR
+    gh_cache = gh_cache if gh_cache is not None else {}
+    request_time = now if now is not None else time.time()
+    live_heartbeats = _active_heartbeats(heartbeat_dir, request_time)
+    tasks_root = project.root / "docs" / "tasks"
+
+    card = _card_fields(folder_dir, source_path, project, tasks_root, live_heartbeats, gh_cache, gh_ttl)
+    if card is None:
+        return None
+
+    if source_path.name == "DRAFT.md":
+        frontmatter = {"goal": card["goal"], "key_info": card["key_info"]}
+        activity = None
+        draft_content = source_path.read_text()
+    else:
+        text = source_path.read_text()
+        frontmatter = parse_frontmatter(text)
+        activity = parse_activity(text)
+        draft_content = None
+
+    children = [
+        (child_dir, child_source)
+        for child_dir, child_source in _iter_task_dirs(project.root)
+        if child_dir.parent == folder_dir
+    ]
+    sub_tasks = None
+    if children:
+        sub_tasks = []
+        for child_dir, child_source in children:
+            child_card = _card_fields(child_dir, child_source, project, tasks_root, live_heartbeats, gh_cache, gh_ttl)
+            if child_card is not None:
+                sub_tasks.append({"folder": child_card["folder"], "column": child_card["column"], "goal": child_card["goal"]})
+
+    return {
+        "project": card["project"],
+        "folder": card["folder"],
+        "parent": card["parent"],
+        "kind": card["kind"],
+        "column": card["column"],
+        "frontmatter": frontmatter,
+        "activity": activity,
+        "draft_content": draft_content,
+        "sub_tasks": sub_tasks,
+        "docs": _list_docs(folder_dir),
+    }

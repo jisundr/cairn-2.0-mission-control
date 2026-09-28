@@ -127,6 +127,62 @@ def test_last_log_date_is_none_when_no_dated_log_line_is_present():
 
 
 # --------------------------------------------------------------------------
+# Activity-log parsing (§6.5)
+# --------------------------------------------------------------------------
+
+
+def test_parse_activity_splits_entries_skips_blockquote_and_drops_unparseable_lines():
+    text = (
+        "---\ngoal: g\n---\n"
+        "> The frontmatter above is the state read on resume.\n\n"
+        "- 2026-09-01: first entry.\n"
+        "a hand-edited line matching neither pattern\n"
+        "- 2026-09-15: second entry, latest.\n"
+    )
+    entries = tasks.parse_activity(text)
+    assert entries == [
+        {"date": "2026-09-01", "text": "first entry."},
+        {"date": "2026-09-15", "text": "second entry, latest."},
+    ]
+
+
+def test_parse_activity_accepts_a_date_range_prefix_and_drops_a_stray_continuation_line():
+    text = (
+        "---\ngoal: g\n---\n"
+        "- 2026-09-27/28: a real entry, always written as one dense line here.\n"
+        "  a stray hand-wrapped continuation line, matching neither pattern.\n"
+        "- 2026-09-29: next entry.\n"
+    )
+    entries = tasks.parse_activity(text)
+    assert entries == [
+        {"date": "2026-09-27/28", "text": "a real entry, always written as one dense line here."},
+        {"date": "2026-09-29", "text": "next entry."},
+    ]
+
+
+def test_parse_activity_empty_when_there_is_no_body_after_frontmatter():
+    assert tasks.parse_activity("---\ngoal: g\n---\n") == []
+
+
+def test_parse_activity_against_this_repos_own_real_multi_entry_state_md():
+    """The parent kanban-board task folder's own `STATE.md` (21 real dated
+    entries as of this build, per requirements.md's own real-fixture
+    instruction) - not just a short synthetic file."""
+    real_state = CAIRN_ROOT / "docs/tasks/2026-09-28-1345-build-kanban-board/STATE.md"
+    text = real_state.read_text()
+
+    entries = tasks.parse_activity(text)
+
+    assert len(entries) >= 20
+    assert all(entry["date"] for entry in entries)
+    assert entries[0]["date"] == "2026-09-28"
+    assert entries[0]["text"].startswith("Created at the user's request")
+    # The template's own blockquote line is real text in this file and must
+    # never be mistaken for an entry.
+    assert not any("frontmatter above is the state read on resume" in e["text"] for e in entries)
+
+
+# --------------------------------------------------------------------------
 # Discovery (§6.1)
 # --------------------------------------------------------------------------
 
@@ -433,3 +489,94 @@ def test_build_cards_two_real_sibling_sub_tasks_report_different_columns(tmp_pat
     assert first["parent"] == parent
     assert second["parent"] == parent
     assert by_folder[parent]["sub_tasks"] == {"done": 2, "total": 2}
+
+
+# --------------------------------------------------------------------------
+# Docs listing (§6.6) and `build_detail` (§6.5, §9)
+# --------------------------------------------------------------------------
+
+
+def test_list_docs_excludes_state_and_draft_and_is_not_recursive(tmp_path):
+    folder = tmp_path / "a-task"
+    write_state(folder)
+    (folder / "REQUIREMENTS.md").write_text("reqs\n")
+    (folder / "PRD.md").write_text("prd\n")
+    (folder / "wireframes").mkdir()
+    (folder / "wireframes" / "nested.md").write_text("nested, not a doc\n")
+
+    docs = tasks._list_docs(folder)
+    names = {d["name"] for d in docs}
+    assert names == {"REQUIREMENTS.md", "PRD.md"}
+    assert all(isinstance(d["size"], int) and d["size"] > 0 for d in docs)
+    assert all(d["modified"] for d in docs)
+
+
+def test_build_detail_returns_none_for_a_folder_with_no_state_or_draft(tmp_path):
+    folder = tmp_path / "not-a-task-folder"
+    folder.mkdir()
+    assert tasks.build_detail(_Project("proj", tmp_path), folder) is None
+
+
+def test_build_detail_assembles_frontmatter_activity_and_docs_for_a_state_folder(tmp_path):
+    root = tmp_path / "proj"
+    folder = root / "docs/tasks/2026-01-01-0000-build-a"
+    write_state(folder, goal="Ship it", key_info="in progress", body="- 2026-01-01: started.\n- 2026-01-02: continued.\n")
+    (folder / "REQUIREMENTS.md").write_text("reqs\n")
+
+    detail = tasks.build_detail(_Project("proj", root), folder)
+
+    assert detail["frontmatter"]["goal"] == "Ship it"
+    assert detail["activity"] == [
+        {"date": "2026-01-01", "text": "started."},
+        {"date": "2026-01-02", "text": "continued."},
+    ]
+    assert detail["draft_content"] is None
+    assert detail["sub_tasks"] is None
+    assert [d["name"] for d in detail["docs"]] == ["REQUIREMENTS.md"]
+    assert detail["column"] == "ready"
+
+
+def test_build_detail_review_folder_carries_draft_content_not_activity(tmp_path):
+    root = tmp_path / "proj"
+    folder = root / "docs/tasks/2026-01-05-0000-review-org-repo-pr-9"
+    folder.mkdir(parents=True)
+    (folder / "DRAFT.md").write_text("# PR #9 — Fix the thing\n\nStatus: pending user review\n")
+
+    detail = tasks.build_detail(_Project("proj", root), folder)
+
+    assert detail["activity"] is None
+    assert detail["draft_content"] == (folder / "DRAFT.md").read_text()
+    assert detail["frontmatter"] == {"goal": "PR #9 — Fix the thing", "key_info": "Status: pending user review"}
+
+
+def test_list_docs_against_this_repos_own_real_task_folder_with_multiple_loose_docs():
+    """The parent kanban-board task folder's own real loose docs
+    (REQUIREMENTS.md/PRODUCT-BRIEF.md/PRD.md/ROADMAP.md, per requirements.md's
+    own Success criteria) - not a synthetic fixture."""
+    folder = CAIRN_ROOT / "docs/tasks/2026-09-28-1345-build-kanban-board"
+    docs = tasks._list_docs(folder)
+    names = {d["name"] for d in docs}
+    assert {"REQUIREMENTS.md", "PRODUCT-BRIEF.md", "PRD.md", "ROADMAP.md"}.issubset(names)
+    assert "STATE.md" not in names
+
+
+def test_build_detail_lists_full_sub_task_records_for_a_parent(tmp_path):
+    root = tmp_path / "proj"
+    parent = root / "docs/tasks/2026-01-01-0000-build-parent"
+    write_state(parent, goal="parent goal")
+    write_state(parent / "01-first", goal="first sub-task", key_info="Done, closed.")
+    write_state(parent / "02-second", goal="second sub-task", key_info="needs-human: which way?")
+
+    (root / ".harness").mkdir()
+    (root / ".harness" / "workflow.md").write_text("## Branching\n- Direct commits to main, no feature branches\n")
+
+    detail = tasks.build_detail(_Project("proj", root), parent)
+
+    assert detail["sub_tasks"] == [
+        {"folder": "docs/tasks/2026-01-01-0000-build-parent/01-first", "column": "done", "goal": "first sub-task"},
+        {
+            "folder": "docs/tasks/2026-01-01-0000-build-parent/02-second",
+            "column": "needs_attention",
+            "goal": "second sub-task",
+        },
+    ]

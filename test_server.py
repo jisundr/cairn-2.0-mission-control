@@ -789,6 +789,95 @@ def test_handle_api_tasks_reports_sub_tasks_only_on_a_folder_with_children(tmp_p
 
 
 # --------------------------------------------------------------------------
+# GET /api/tasks/detail (drawer, §6.5/§9) and GET /api/tasks/doc (§6.6/§9)
+# --------------------------------------------------------------------------
+
+
+def test_handle_api_tasks_detail_happy_path_includes_frontmatter_activity_and_docs(tmp_path):
+    root = make_project(tmp_path, "proj")
+    folder = root / "docs/tasks/2026-01-01-0000-build-a"
+    write_task_state(folder, goal="Ship it", key_info="in progress")
+    (folder / "REQUIREMENTS.md").write_text("reqs\n")
+
+    app = server.TokenMeteringApp(root)
+    status, body = app.handle_api(
+        "/api/tasks/detail", {"project": ["proj"], "folder": ["docs/tasks/2026-01-01-0000-build-a"]}
+    )
+
+    assert status == 200
+    data = body["data"]
+    assert data["frontmatter"]["goal"] == "Ship it"
+    assert data["activity"] == [{"date": "2026-01-01", "text": "started."}]
+    assert data["draft_content"] is None
+    assert [d["name"] for d in data["docs"]] == ["REQUIREMENTS.md"]
+    assert "generated_at" in body["meta"]
+
+
+def test_handle_api_tasks_detail_404s_for_unknown_project_or_folder(tmp_path):
+    root = make_project(tmp_path, "proj")
+    write_task_state(root / "docs/tasks/2026-01-01-0000-build-a")
+    app = server.TokenMeteringApp(root)
+
+    status, _ = app.handle_api("/api/tasks/detail", {"project": ["no-such-project"], "folder": ["docs/tasks/x"]})
+    assert status == 404
+
+    status, _ = app.handle_api(
+        "/api/tasks/detail", {"project": ["proj"], "folder": ["docs/tasks/no-such-folder"]}
+    )
+    assert status == 404
+
+
+def test_handle_api_tasks_doc_happy_path_returns_content(tmp_path):
+    root = make_project(tmp_path, "proj")
+    folder = root / "docs/tasks/2026-01-01-0000-build-a"
+    write_task_state(folder)
+    (folder / "REQUIREMENTS.md").write_text("# Requirements\n\nBody text.\n")
+
+    app = server.TokenMeteringApp(root)
+    status, body = app.handle_api(
+        "/api/tasks/doc",
+        {"project": ["proj"], "folder": ["docs/tasks/2026-01-01-0000-build-a"], "file": ["REQUIREMENTS.md"]},
+    )
+
+    assert status == 200
+    assert body["data"] == {"content": "# Requirements\n\nBody text.\n"}
+
+
+def test_handle_api_tasks_doc_refuses_a_file_outside_the_folder(tmp_path):
+    root = make_project(tmp_path, "proj")
+    folder = root / "docs/tasks/2026-01-01-0000-build-a"
+    write_task_state(folder)
+    outside = root / "docs/tasks/2026-01-02-0000-build-b"
+    write_task_state(outside)
+    (outside / "SECRET.md").write_text("should never be served via folder-a's request\n")
+
+    app = server.TokenMeteringApp(root)
+    status, _ = app.handle_api(
+        "/api/tasks/doc",
+        {
+            "project": ["proj"],
+            "folder": ["docs/tasks/2026-01-01-0000-build-a"],
+            "file": ["../2026-01-02-0000-build-b/SECRET.md"],
+        },
+    )
+    assert status == 404
+
+
+def test_handle_api_tasks_doc_refuses_a_non_markdown_file(tmp_path):
+    root = make_project(tmp_path, "proj")
+    folder = root / "docs/tasks/2026-01-01-0000-build-a"
+    write_task_state(folder)
+    (folder / "notes.txt").write_text("not markdown\n")
+
+    app = server.TokenMeteringApp(root)
+    status, _ = app.handle_api(
+        "/api/tasks/doc",
+        {"project": ["proj"], "folder": ["docs/tasks/2026-01-01-0000-build-a"], "file": ["notes.txt"]},
+    )
+    assert status == 404
+
+
+# --------------------------------------------------------------------------
 # usage_limit_events surfaced separately from calls
 # --------------------------------------------------------------------------
 
