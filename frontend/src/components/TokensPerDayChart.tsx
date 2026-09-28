@@ -1,6 +1,6 @@
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Timeseries, TimeseriesPoint } from "../api/types";
-import { formatCost, formatDayLabel, formatTokens } from "../lib/format";
+import { formatCost, formatDateLabel, formatDayLabel, formatTokens } from "../lib/format";
 import { isUnknownCost } from "./InfoDot";
 
 interface TokensPerDayChartProps {
@@ -124,7 +124,7 @@ export function TokensPerDayChart({ timeseries, selectedDate, onSelectDate }: To
             content={({ active, payload }) => {
               const point = payload?.[0]?.payload as (TimeseriesPoint & { bucket: string }) | undefined;
               if (!active || !point) return null;
-              return <DayTooltip point={point} bucketLabel={tickLabel(timeseries.bucket, point.bucket)} series={series} />;
+              return <DayTooltip point={point} dateLabel={tooltipDateLabel(timeseries.bucket, point.bucket)} series={series} />;
             }}
           />
           {series.map((s, i) => (
@@ -235,6 +235,16 @@ function tickLabel(bucket: "hour" | "day", value: string): string {
   return bucket === "hour" ? value.slice(-2) : formatDayLabel(value);
 }
 
+// Tooltip's own header date - the terser "MM-DD" tickLabel above is meant
+// for an axis tick, not spelled out enough for the tooltip's date line;
+// "hour" buckets are already a bare time-of-day, so keep tickLabel's answer
+// there and only swap in the fuller format for "day" buckets. Exported for
+// direct unit test, same reasoning as buildSeries/tooltipRows: a real hover
+// is real-browser territory jsdom can't reliably reproduce.
+export function tooltipDateLabel(bucket: "hour" | "day", value: string): string {
+  return bucket === "day" ? formatDateLabel(bucketDate(value)) : tickLabel(bucket, value);
+}
+
 // On request: date + day total on their own header row (cost first, tokens
 // parenthetical - same "$X (Y tok)" order the By-panels already use), then
 // one row per model with its own color swatch + name on the left and its
@@ -242,18 +252,18 @@ function tickLabel(bucket: "hour" | "day", value: string): string {
 // rather than the plain two-column text list this used to be.
 function DayTooltip({
   point,
-  bucketLabel,
+  dateLabel,
   series,
 }: {
   point: TimeseriesPoint & { bucket: string };
-  bucketLabel: string;
+  dateLabel: string;
   series: Series[];
 }) {
   const rows = tooltipRows(point, series);
   return (
-    <div className="chart-tooltip">
+    <div className="chart-tooltip chart-tooltip-day">
       <div className="chart-tooltip-title mono" style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-        <span>{bucketLabel}</span>
+        <span>{dateLabel}</span>
         <span>
           {formatCost(point.cost)} ({formatTokens(point.tokens)})
         </span>

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Timeseries } from "../api/types";
 import { installFetchMock } from "../test/mockApi";
 import { renderWithClient } from "../test/renderWithClient";
-import { buildChartData, buildSeries, TokensPerDayChart, tooltipRows } from "./TokensPerDayChart";
+import { buildChartData, buildSeries, TokensPerDayChart, tooltipDateLabel, tooltipRows } from "./TokensPerDayChart";
 
 const TIMESERIES: Timeseries = {
   range: "7d",
@@ -125,6 +125,20 @@ describe("TokensPerDayChart", () => {
   // color/order, only models actually present that day get a row, and a
   // day with fewer models than the range's full series list doesn't grow
   // extra rows for models it doesn't have.
+  // The tooltip's own header date is spelled out fuller than the compact
+  // "MM-DD" axis tick - a "day" bucket gets the full calendar-date label,
+  // while an "hour" bucket (today's range) is already a bare time-of-day
+  // and needs no change.
+  describe("tooltipDateLabel", () => {
+    it("spells out a 'day' bucket's date in full", () => {
+      expect(tooltipDateLabel("day", "2019-01-05")).toBe("Jan 5 2019, Sat");
+    });
+
+    it("leaves an 'hour' bucket as its bare hour", () => {
+      expect(tooltipDateLabel("hour", "2026-09-24T14")).toBe("14");
+    });
+  });
+
   describe("tooltipRows", () => {
     const series = buildSeries(TIMESERIES.points);
 

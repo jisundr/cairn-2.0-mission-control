@@ -191,6 +191,12 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
    their own container and don't reach a `.sw` used here, which otherwise
    renders as an unsized, flex-shrunk-to-nothing span. */
 .chart-tooltip-row .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+/* TokensPerDayChart's tooltip only (not HbarList's, which stays on the
+   shared .chart-tooltip default) - its header date is now the fuller
+   formatDateLabel string (e.g. "Jan 5 2019, Sat"), which needs more room
+   than .chart-tooltip's shared 220px to sit on the same row as cost/tokens
+   without cramping. */
+.chart-tooltip-day { max-width: 280px; padding: 12px 14px; font-size: 12px; }
 
 /* ---- hbar list: row-level styling now lives inline in each Recharts
    `shape`/`tick` renderer (HbarList.tsx, TruncatedAxisTick.tsx,
