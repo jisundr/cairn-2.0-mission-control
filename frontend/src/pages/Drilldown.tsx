@@ -317,6 +317,7 @@ function ChatTurn({ sessionId, turn }: { sessionId: string; turn: Turn }) {
       ? firstCall.detail.prompt ?? ""
       : "Transcript unavailable."
     : "loading…";
+  const hasToolCalls = turn.calls.some((entry) => (entry.detail?.available ? entry.detail.tool_calls.length > 0 : false));
 
   return (
     <div className="chat-turn" data-testid={`chat-turn-${sessionId}-${turn.firstGlobalPosition}`}>
@@ -327,13 +328,17 @@ function ChatTurn({ sessionId, turn }: { sessionId: string; turn: Turn }) {
         {turn.agentName}
       </div>
       <div className="bubble prompt">{promptText}</div>
-      {turn.calls.map((entry) =>
-        (entry.detail?.available ? entry.detail.tool_calls : []).map((toolCall, i) => (
-          <div className="toolcall" key={`${entry.call.request_id}-${i}`}>
-            <span className="dot" />
-            <b>{toolCall.name}</b> — {toolCall.summary}
-          </div>
-        )),
+      {hasToolCalls && (
+        <div className="toolcall-thread">
+          {turn.calls.map((entry) =>
+            (entry.detail?.available ? entry.detail.tool_calls : []).map((toolCall, i) => (
+              <div className="toolcall" key={`${entry.call.request_id}-${i}`}>
+                <span className="dot" />
+                <b>{toolCall.name}</b> — {toolCall.summary}
+              </div>
+            )),
+          )}
+        </div>
       )}
       {finalResponse && <div className="bubble response">{finalResponse}</div>}
     </div>

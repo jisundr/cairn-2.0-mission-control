@@ -125,6 +125,37 @@ describe("Drilldown", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  it("wraps a turn's tool-calls in one toolcall-thread container, and omits it when a turn has none", async () => {
+    const NO_CALLS_SESSION_ID = "no-tool-calls-session";
+    installFetchMock({
+      ...projectsHandlers(),
+      [`/api/session/${SESSION_ID}/trace`]: () => envelope(TRACE),
+      [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
+    });
+
+    const { container: withCalls } = renderWithClient(
+      <Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />,
+    );
+    await waitFor(() => expect(screen.getByTestId("chat-thread")).toHaveTextContent("I think we need to have backfill"));
+
+    const thread = withCalls.querySelector(".toolcall-thread");
+    expect(thread).not.toBeNull();
+    expect(thread!.querySelectorAll(".toolcall")).toHaveLength(1);
+
+    installFetchMock({
+      ...projectsHandlers(),
+      [`/api/session/${NO_CALLS_SESSION_ID}/trace`]: () =>
+        envelope({ ...TRACE, session_id: NO_CALLS_SESSION_ID }),
+      [`/api/call/${NO_CALLS_SESSION_ID}/1`]: () => envelope({ ...callDetail(1), session_id: NO_CALLS_SESSION_ID, tool_calls: [] }),
+    });
+
+    const { container: withoutCalls } = renderWithClient(
+      <Drilldown sessionId={NO_CALLS_SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />,
+    );
+    await waitFor(() => expect(screen.getByTestId("chat-thread")).toHaveTextContent("I think we need to have backfill"));
+    expect(withoutCalls.querySelector(".toolcall-thread")).toBeNull();
+  });
+
   it("labels each turn with its raw agentName, distinguishing the human's own turn from a subagent's", async () => {
     const MULTI_SESSION_ID = "multi-agent-session";
     const trace: SessionTrace = {
