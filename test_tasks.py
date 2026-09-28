@@ -255,14 +255,21 @@ def test_parent_relpath_detects_a_sub_task_one_level_up(tmp_path):
     [
         ("needs-human: which db to use?", True),
         ("stalled after 3 attempts", True),
-        ("awaiting requirements approval", True),
-        ("awaiting plan approval", True),
+        ("awaiting requirements approval", False),
+        ("awaiting plan approval", False),
         ("Done. Reviewed PASS.", False),
         ("", False),
     ],
 )
-def test_needs_attention_fact_matches_cairn_triage_markers(key_info, expected):
+def test_needs_attention_fact_matches_only_needs_human_and_stalled(key_info, expected):
     assert tasks._needs_attention_fact(key_info) is expected
+
+
+def test_awaiting_approval_fact_matches_both_gate_strings():
+    assert tasks._awaiting_approval_fact("awaiting requirements approval") is True
+    assert tasks._awaiting_approval_fact("awaiting plan approval") is True
+    assert tasks._awaiting_approval_fact("approved; next: builder") is False
+    assert tasks._awaiting_approval_fact("") is False
 
 
 def test_is_direct_commit_project_reads_this_repos_own_workflow_md():
@@ -336,11 +343,20 @@ def test_gh_pr_merged_falls_back_to_none_when_gh_is_missing(tmp_path, monkeypatc
     assert tasks._gh_pr_merged("f", tmp_path, {}, 60.0) is None
 
 
-def test_column_precedence_needs_attention_beats_done_beats_ongoing():
-    assert tasks._column(needs_attention=True, done=True, active=True) == "needs_attention"
-    assert tasks._column(needs_attention=False, done=True, active=True) == "done"
-    assert tasks._column(needs_attention=False, done=False, active=True) == "ongoing"
-    assert tasks._column(needs_attention=False, done=False, active=False) == "ready"
+def _stage(key_info="", *, kind="build", has_plan=True, done=False, active=False):
+    return tasks._column(kind=kind, key_info=key_info, has_plan=has_plan, done=done, active=active)
+
+
+def test_column_precedence_across_the_six_stages():
+    assert _stage(done=True, key_info="awaiting plan approval", has_plan=False) == "done"
+    assert _stage("awaiting plan approval", has_plan=False) == "awaiting_approval"
+    assert _stage("awaiting requirements approval") == "awaiting_approval"
+    assert _stage("plain", has_plan=False) == "scoping"
+    assert _stage("plain", kind="research") == "scoping"
+    assert _stage("reviewer running", active=True) == "in_review"
+    assert _stage("approved; next: builder") == "planned"
+    assert _stage("approved; next: builder", active=True) == "building"
+    assert _stage("implementing step 2") == "building"
 
 
 # --------------------------------------------------------------------------
@@ -380,14 +396,16 @@ def test_active_heartbeats_ignores_corrupt_and_missing_directory(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_build_cards_columns_a_ready_a_needs_attention_and_an_active_card(tmp_path):
+def test_build_cards_stages_a_planned_a_needs_attention_and_an_active_card(tmp_path):
     # `Project.root` is contractually already-resolved (`server.discover_projects`
     # always does so) - resolving it here too, rather than relying on `tmp_path`
     # happening to already be canonical, keeps the heartbeat-match test honest.
     root = (tmp_path / "proj").resolve()
-    write_state(root / "docs/tasks/2026-01-01-0000-build-ready", key_info="nothing blocking")
+    write_state(root / "docs/tasks/2026-01-01-0000-build-ready", key_info="approved; next: builder")
     write_state(root / "docs/tasks/2026-01-02-0000-build-stuck", key_info="needs-human: pick a name")
     write_state(root / "docs/tasks/2026-01-03-0000-build-live", key_info="in progress")
+    for n, name in enumerate(("ready", "stuck", "live"), start=1):
+        (root / f"docs/tasks/2026-01-0{n}-0000-build-{name}" / "PLAN.md").write_text("plan\n")
 
     heartbeat_dir = tmp_path / "active"
     heartbeat_dir.mkdir()
@@ -398,9 +416,11 @@ def test_build_cards_columns_a_ready_a_needs_attention_and_an_active_card(tmp_pa
     cards = tasks.build_cards([_Project("proj", root)], heartbeat_dir=heartbeat_dir)
     by_folder = {c["folder"]: c for c in cards}
 
-    assert by_folder["docs/tasks/2026-01-01-0000-build-ready"]["column"] == "ready"
-    assert by_folder["docs/tasks/2026-01-02-0000-build-stuck"]["column"] == "needs_attention"
-    assert by_folder["docs/tasks/2026-01-03-0000-build-live"]["column"] == "ongoing"
+    assert by_folder["docs/tasks/2026-01-01-0000-build-ready"]["column"] == "planned"
+    stuck = by_folder["docs/tasks/2026-01-02-0000-build-stuck"]
+    assert stuck["column"] == "building"  # keeps its stage; only the flag is set
+    assert stuck["needs_attention"] is True
+    assert by_folder["docs/tasks/2026-01-03-0000-build-live"]["column"] == "building"
     assert by_folder["docs/tasks/2026-01-03-0000-build-live"]["active"] is True
     assert all(c["sub_tasks"] is None for c in cards)
 
@@ -421,13 +441,14 @@ def test_build_cards_two_sibling_sub_tasks_report_independent_columns_and_parent
     first = by_folder["docs/tasks/2026-01-01-0000-build-parent/01-first"]
     second = by_folder["docs/tasks/2026-01-01-0000-build-parent/02-second"]
     assert first["column"] == "done"
-    assert second["column"] == "needs_attention"
+    assert second["column"] == "scoping"  # no PLAN.md; keeps its stage
+    assert second["needs_attention"] is True
     assert first["parent"] == "docs/tasks/2026-01-01-0000-build-parent"
     assert second["parent"] == "docs/tasks/2026-01-01-0000-build-parent"
 
     parent_card = by_folder["docs/tasks/2026-01-01-0000-build-parent"]
     assert parent_card["sub_tasks"] == {"done": 1, "total": 2}
-    assert parent_card["column"] == "ready"  # parent's own facts, independent of its children
+    assert parent_card["column"] == "scoping"  # parent's own facts, independent of its children
 
 
 def test_build_cards_omits_sub_tasks_field_for_a_folder_with_no_children(tmp_path):
@@ -577,7 +598,9 @@ def test_build_detail_assembles_frontmatter_activity_and_docs_for_a_state_folder
     assert detail["draft_content"] is None
     assert detail["sub_tasks"] is None
     assert [d["name"] for d in detail["docs"]] == ["REQUIREMENTS.md"]
-    assert detail["column"] == "ready"
+    assert detail["column"] == "scoping"
+    assert detail["needs_attention"] is False
+    assert detail["active"] is False
 
 
 def test_build_detail_review_folder_carries_draft_content_not_activity(tmp_path):
@@ -617,10 +640,90 @@ def test_build_detail_lists_full_sub_task_records_for_a_parent(tmp_path):
     detail = tasks.build_detail(_Project("proj", root), parent)
 
     assert detail["sub_tasks"] == [
-        {"folder": "docs/tasks/2026-01-01-0000-build-parent/01-first", "column": "done", "goal": "first sub-task"},
+        {
+            "folder": "docs/tasks/2026-01-01-0000-build-parent/01-first",
+            "column": "done",
+            "needs_attention": False,
+            "active": False,
+            "goal": "first sub-task",
+        },
         {
             "folder": "docs/tasks/2026-01-01-0000-build-parent/02-second",
-            "column": "needs_attention",
+            "column": "scoping",
+            "needs_attention": True,
+            "active": False,
             "goal": "second sub-task",
         },
     ]
+
+
+def test_build_cards_derives_each_stage_from_folder_contents_and_key_info(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    (root / ".harness").mkdir(parents=True)
+    (root / ".harness" / "workflow.md").write_text("## Branching\n- Direct commits to main, no feature branches\n")
+    tasks_dir = root / "docs/tasks"
+    cases = {
+        "2026-01-01-0000-build-a": ("plain", False, "scoping"),
+        "2026-01-02-0000-build-b": ("awaiting plan approval", False, "awaiting_approval"),
+        "2026-01-03-0000-build-c": ("awaiting plan approval", True, "awaiting_approval"),
+        "2026-01-04-0000-research-d": ("plain", True, "scoping"),
+        "2026-01-05-0000-research-e": ("Done, closed.", True, "done"),
+        "2026-01-06-0000-build-f": ("reviewer running", True, "in_review"),
+        "2026-01-07-0000-build-g": ("Done, closed.", True, "done"),
+        "2026-01-08-0000-build-h": ("implementing step 2", True, "building"),
+    }
+    for name, (key_info, plan, _) in cases.items():
+        write_state(tasks_dir / name, key_info=key_info)
+        if plan:
+            (tasks_dir / name / "PLAN.md").write_text("plan\n")
+
+    by_folder = {c["folder"]: c for c in tasks.build_cards([_Project("proj", root)])}
+    for name, (_, _, expected) in cases.items():
+        assert by_folder[f"docs/tasks/{name}"]["column"] == expected, name
+    assert by_folder["docs/tasks/2026-01-02-0000-build-b"]["needs_attention"] is False
+    assert by_folder["docs/tasks/2026-01-03-0000-build-c"]["needs_attention"] is False
+
+
+def test_build_cards_needs_human_and_stalled_keep_stage_and_set_flag(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    for name, ki in (("2026-01-01-0000-build-a", "needs-human: x"), ("2026-01-02-0000-build-b", "stalled: y")):
+        write_state(root / "docs/tasks" / name, key_info=ki)
+        (root / "docs/tasks" / name / "PLAN.md").write_text("plan\n")
+    for c in tasks.build_cards([_Project("proj", root)]):
+        assert c["needs_attention"] is True
+        assert c["column"] == "building"
+
+
+def test_build_cards_fresh_heartbeat_on_approved_plan_is_building_and_active(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    folder = root / "docs/tasks/2026-01-01-0000-build-a"
+    write_state(folder, key_info="approved; next: builder")
+    (folder / "PLAN.md").write_text("plan\n")
+    heartbeat_dir = tmp_path / "active"
+    heartbeat_dir.mkdir()
+    (heartbeat_dir / "s.json").write_text('{"project": "%s", "task": "docs/tasks/2026-01-01-0000-build-a"}' % str(root))
+
+    card = tasks.build_cards([_Project("proj", root)], heartbeat_dir=heartbeat_dir)[0]
+    assert card["column"] == "building"
+    assert card["active"] is True
+
+
+def test_build_detail_reports_needs_attention_and_active_per_folder_and_sub_task(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    parent = root / "docs/tasks/2026-01-01-0000-build-parent"
+    write_state(parent, key_info="needs-human: x")
+    write_state(parent / "01-live", key_info="in progress")
+    write_state(parent / "02-plain", key_info="in progress")
+    heartbeat_dir = tmp_path / "active"
+    heartbeat_dir.mkdir()
+    (heartbeat_dir / "s.json").write_text(
+        '{"project": "%s", "task": "docs/tasks/2026-01-01-0000-build-parent/01-live"}' % str(root)
+    )
+
+    detail = tasks.build_detail(_Project("proj", root), parent, heartbeat_dir=heartbeat_dir)
+    assert detail["needs_attention"] is True
+    assert detail["active"] is False
+    subs = {e["folder"].rsplit("/", 1)[1]: e for e in detail["sub_tasks"]}
+    assert (subs["01-live"]["needs_attention"], subs["01-live"]["active"]) == (False, True)
+    assert (subs["02-plain"]["needs_attention"], subs["02-plain"]["active"]) == (False, False)
+    assert all("column" in e for e in detail["sub_tasks"])
