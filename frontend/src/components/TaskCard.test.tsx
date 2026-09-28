@@ -74,6 +74,12 @@ describe("TaskCard", () => {
     expect(document.querySelector(".kcard-attn")).not.toBeInTheDocument();
   });
 
+  it("shows the last-touched date in Overview's readable day format, not the terse MM-DD form", () => {
+    render(<TaskCard task={task({ last_log_date: "2019-01-05" })} showProject={false} />);
+    expect(screen.getByText("last touched Jan 5 2019, Sat")).toBeInTheDocument();
+    expect(screen.queryByText(/last touched 01-05/)).not.toBeInTheDocument();
+  });
+
   it("passes its own already-known project alongside its folder on click, so the caller never has to re-derive it by folder alone", () => {
     const onClick = vi.fn();
     const cardTask = task({ project: "project-b", folder: "docs/tasks/0001-shared-folder-name" });

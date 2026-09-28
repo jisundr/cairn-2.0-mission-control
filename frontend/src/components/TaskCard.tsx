@@ -1,5 +1,5 @@
 import { attentionLabel } from "../lib/attention";
-import { formatDayLabel, taskDisplayName } from "../lib/format";
+import { formatDateLabel, taskDisplayName } from "../lib/format";
 import type { TaskCard as TaskCardData } from "../api/types";
 
 interface TaskCardProps {
@@ -62,7 +62,7 @@ export function TaskCard({ task, showProject, onClick }: TaskCardProps) {
         </div>
       )}
       <div className="kcard-foot">
-        <span className="kcard-date">last touched {formatDayLabel(task.last_log_date)}</span>
+        <span className="kcard-date">last touched {formatDateLabel(task.last_log_date)}</span>
         {task.column === "needs_attention" && <span className="kcard-attn">{attentionLabel(task.key_info)}</span>}
         {task.column === "ongoing" && (
           <span className="kcard-ongoing">
