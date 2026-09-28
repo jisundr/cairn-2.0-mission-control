@@ -358,7 +358,14 @@ table.sessions a.sess:hover { text-decoration: underline; }
    left/right alignment, without a side-accent border (flagged as an
    AI-UI tell by the design hook - the centered layout, mono font, and
    dot marker already carry the distinction). */
+/* `.transcript` only ever has one direct DOM child (react-virtual's sizing
+   wrapper - see Drilldown.tsx) - this `gap` never reaches the individual
+   turns, which are absolutely-positioned siblings inside that one child, so
+   it's dead as far as layout goes. Left in place since it's harmless, but
+   `.chat-turn` below is what actually spaces bubbles/toolcalls within (and
+   between, via its padding-bottom) each turn. */
 .transcript { display: flex; flex-direction: column; gap: 14px; }
+.chat-turn { display: flex; flex-direction: column; gap: 14px; padding-bottom: 14px; }
 .bubble { max-width: 74%; padding: 11px 15px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; }
 .bubble.prompt { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
 .bubble.response { align-self: flex-end; background: var(--add-bg); border: 1px solid var(--border-soft); }
