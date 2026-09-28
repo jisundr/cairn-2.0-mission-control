@@ -109,6 +109,13 @@ describe("AppHeader", () => {
     expect(container.querySelector(".wordmark .sub-short")).toHaveTextContent("mc");
   });
 
+  it("mounts the accent picker, independent of any project filter (AppHeader takes no project prop)", async () => {
+    installFetchMock({ "/api/tasks": () => envelope([]) });
+    renderHeader(newClient());
+
+    expect(screen.getByTestId("accent-picker-btn")).toBeInTheDocument();
+  });
+
   describe("attention signaling (PRD §6.9)", () => {
     it("shows no pill and the plain title when there's nothing to flag", async () => {
       installFetchMock({ "/api/tasks": () => envelope([task({ column: "ready" })]) });

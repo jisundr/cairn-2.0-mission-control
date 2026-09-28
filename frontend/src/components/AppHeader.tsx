@@ -10,6 +10,7 @@ import {
   titleForCount,
   updateFavicon,
 } from "../lib/attention";
+import { AccentPicker } from "./AccentPicker";
 import { RefreshIcon, VolumeIcon } from "./icons";
 
 // Header block per `overview-loaded.html`'s `header.app` markup - shared by
@@ -150,6 +151,7 @@ export function AppHeader({
         )}
       </div>
       <div className="app-right">
+        <AccentPicker />
         {attentionCount > 0 && (
           <button
             type="button"
