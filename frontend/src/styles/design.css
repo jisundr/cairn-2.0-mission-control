@@ -83,6 +83,7 @@ header.app {
 .wordmark .dim { color: var(--ink-faint); font-weight: 500; }
 .wordmark .sep { color: var(--ink-faint); font-weight: 500; }
 .wordmark .sub { color: var(--ink-soft); font-weight: 600; }
+.wordmark .sub-short { color: var(--ink-soft); font-weight: 600; display: none; }
 nav.app-tabs { display: flex; gap: 20px; }
 nav.app-tabs a {
   font-size: 13px; font-weight: 600; color: var(--ink-soft); text-decoration: none;
@@ -397,8 +398,8 @@ table.sessions a.sess:hover { text-decoration: underline; }
   .grid, .grid-2, .drill-grid { grid-template-columns: 1fr; }
   .shell { padding: 16px 16px 36px; }
   header.app { gap: 12px; }
-  .app-right { width: 100%; justify-content: space-between; }
   .wordmark .sub { display: none; }
+  .wordmark .sub-short { display: inline; }
   nav.app-tabs { display: none; }
   .dropdown-btn.nav-dropdown { display: flex; }
 }

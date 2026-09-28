@@ -49,4 +49,16 @@ describe("AppHeader", () => {
 
     expect(onTabChange).toHaveBeenCalledWith("overview");
   });
+
+  // The 900px breakpoint swaps the wordmark's full "mission-control" suffix
+  // for an abbreviated "mc" - CSS-only (like the nav dropdown above), so
+  // both are always in the DOM and only one is ever visible per viewport.
+  it("renders both the full and abbreviated wordmark suffix for CSS to switch between", () => {
+    const { container } = render(
+      <AppHeader activeTab="overview" onTabChange={() => {}} connected onRefresh={() => {}} updatedLabel={null} />,
+    );
+
+    expect(container.querySelector(".wordmark .sub")).toHaveTextContent("mission-control");
+    expect(container.querySelector(".wordmark .sub-short")).toHaveTextContent("mc");
+  });
 });

@@ -47,6 +47,7 @@ export function AppHeader({
         <span className="wordmark">
           <span className="dim">~/ </span>cairn<span className="sep">/</span>
           <span className="sub">mission-control</span>
+          <span className="sub-short">mc</span>
         </span>
         {showTabs && (
           <>
