@@ -170,6 +170,7 @@ export interface TaskCard {
   goal: string;
   key_info: string;
   last_log_date: string;
+  last_log_time: string;
   column: TaskColumn;
   active: boolean;
   needs_attention: boolean;

@@ -12,6 +12,7 @@ function task(overrides: Partial<TaskCardData> = {}): TaskCardData {
     goal: "Cross-project kanban board in mission-control.",
     key_info: "in progress",
     last_log_date: "2026-09-28",
+    last_log_time: "",
     column: "planned",
     active: false,
     needs_attention: false,
@@ -88,6 +89,17 @@ describe("TaskCard", () => {
     render(<TaskCard task={task({ last_log_date: "2019-01-05" })} showProject={false} />);
     expect(screen.getByText("last touched Jan 5 2019, Sat")).toBeInTheDocument();
     expect(screen.queryByText(/last touched 01-05/)).not.toBeInTheDocument();
+  });
+
+  it("shows relative time instead of the date when the last log line carries a time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-29T10:00:00Z"));
+    try {
+      render(<TaskCard task={task({ last_log_date: "2026-09-28", last_log_time: "11:00" })} showProject={false} />);
+      expect(screen.getByText("last touched 23h ago")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("passes its own already-known project alongside its folder on click, so the caller never has to re-derive it by folder alone", () => {

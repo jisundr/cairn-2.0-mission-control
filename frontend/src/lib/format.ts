@@ -89,6 +89,11 @@ export function taskDisplayName(folder: string): string {
   return basename.replace(/^\d{4}-\d{2}-\d{2}-\d{4}-/, "");
 }
 
+export function formatLastTouched(lastLogDate: string, lastLogTime: string, now: Date = new Date()): string {
+  if (!lastLogTime) return formatDateLabel(lastLogDate);
+  return formatRelativeToNow(`${lastLogDate}T${lastLogTime}:00Z`, now);
+}
+
 export function formatRelativeToNow(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
   const diffMs = now.getTime() - then;

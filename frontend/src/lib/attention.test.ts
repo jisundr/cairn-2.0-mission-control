@@ -22,6 +22,7 @@ function task(overrides: Partial<TaskCard> = {}): TaskCard {
     goal: "goal",
     key_info: "needs-human",
     last_log_date: "2026-09-28",
+    last_log_time: "",
     column: "building",
     active: false,
     needs_attention: true,

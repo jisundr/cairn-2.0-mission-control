@@ -13,6 +13,7 @@ function card() {
     goal: "A card for the refresh check.",
     key_info: "in progress",
     last_log_date: "2026-01-01",
+    last_log_time: "",
     column: "building",
     active: false,
     needs_attention: false,

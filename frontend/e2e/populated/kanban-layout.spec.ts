@@ -16,6 +16,7 @@ function card(i: number, column: string) {
     goal: "A card with enough text to give the column pane real height in a layout check.",
     key_info: "in progress",
     last_log_date: "2026-01-01",
+    last_log_time: "",
     column,
     active: false,
     needs_attention: false,

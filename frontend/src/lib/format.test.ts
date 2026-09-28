@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDateLabel, taskDisplayName } from "./format";
+import { formatDateLabel, formatLastTouched, taskDisplayName } from "./format";
 
 describe("formatDateLabel", () => {
   it("omits the year when the date falls in the given now's year", () => {
@@ -20,5 +20,18 @@ describe("taskDisplayName", () => {
     expect(taskDisplayName("docs/tasks/2026-09-28-1345-build-kanban-board/02-heartbeat-hooks")).toBe(
       "02-heartbeat-hooks",
     );
+  });
+});
+
+describe("formatLastTouched", () => {
+  it("renders relative time from the date and UTC time when a time is present", () => {
+    const now = new Date("2026-09-29T10:00:00Z");
+    expect(formatLastTouched("2026-09-28", "11:00", now)).toBe("23h ago");
+    expect(formatLastTouched("2026-09-29", "09:45", now)).toBe("15m ago");
+  });
+
+  it("falls back to the date label when the time is empty", () => {
+    const now = new Date("2026-09-29T10:00:00Z");
+    expect(formatLastTouched("2019-01-05", "", now)).toBe(formatDateLabel("2019-01-05"));
   });
 });

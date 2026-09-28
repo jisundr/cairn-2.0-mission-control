@@ -18,6 +18,7 @@ function task(overrides: Partial<TaskCard> = {}): TaskCard {
     goal: "Cross-project kanban board in mission-control.",
     key_info: "in progress",
     last_log_date: "2026-09-28",
+    last_log_time: "",
     column: "planned",
     active: false,
     needs_attention: false,
