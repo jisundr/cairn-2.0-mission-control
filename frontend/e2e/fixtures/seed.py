@@ -156,6 +156,16 @@ def seed_transcript(scratch: Path, project_root: Path) -> None:
 
 KANBAN_TASK_FOLDER = "docs/tasks/2026-01-01-0000-research-e2e-drawer-fixture"
 
+# 05-verification's own parallel-heartbeat scenario (PRD §12 step 9's
+# "scripted equivalent" allowance): two real task folders standing in for
+# two real parallel Claude Code sessions - kanban-liveness.spec.ts writes a
+# heartbeat file under `~/.claude/cairn/active/` (this webServer's own
+# scratch HOME, per tasks.DEFAULT_HEARTBEAT_DIR) naming each folder's
+# `(project, task)` pair, ages one past the freshness window, and asserts
+# only that one's card drops out of Ongoing.
+HEARTBEAT_TASK_FOLDER_A = "docs/tasks/2026-01-03-0000-research-e2e-heartbeat-a"
+HEARTBEAT_TASK_FOLDER_B = "docs/tasks/2026-01-03-0000-research-e2e-heartbeat-b"
+
 
 def seed_task_folder(project_root: Path) -> None:
     """One `docs/tasks/` folder so the Kanban board (goal 11) has a real
@@ -176,6 +186,27 @@ def seed_task_folder(project_root: Path) -> None:
     )
 
 
+def seed_heartbeat_task_folders(project_root: Path) -> None:
+    """Two more `docs/tasks/` folders, `research`-kind and worded so neither
+    `_needs_attention_fact` nor `_done_fact` fires - column here is
+    otherwise (`ready`), so `kanban-liveness.spec.ts` can attribute an
+    `ongoing` card verbatim to its own synthetic heartbeat file, not to
+    frontmatter wording."""
+    for folder_rel, label in ((HEARTBEAT_TASK_FOLDER_A, "a"), (HEARTBEAT_TASK_FOLDER_B, "b")):
+        folder = project_root / folder_rel
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "STATE.md").write_text(
+            "---\n"
+            f"goal: E2E fixture task folder {label}, used only to exercise Kanban heartbeat liveness (§8) in a real browser.\n"
+            "path: escalated\n"
+            "key_info: fixture only, not a live task\n"
+            "flags: []\n"
+            "---\n"
+            "> state read on resume; log below is append-only.\n\n"
+            f"- 2026-01-03: Fixture folder {label} seeded by seed.py for kanban-liveness e2e coverage.\n"
+        )
+
+
 def main() -> None:
     scratch = Path(sys.argv[1]).resolve()
     project_root = scratch / "project"
@@ -185,6 +216,7 @@ def main() -> None:
     seed_db(project_root, now)
     seed_transcript(scratch, project_root)
     seed_task_folder(project_root)
+    seed_heartbeat_task_folders(project_root)
     print(project_root)
 
 
