@@ -5,7 +5,7 @@ import { expect, type Page, test } from "@playwright/test";
 // bottom on a tall and a short viewport. Every test sets its viewport
 // explicitly - headless Chrome will not go narrow on its own.
 
-const STAGES = ["scoping", "awaiting_approval", "planned", "building", "in_review", "done"];
+const STAGES = ["scoping", "awaiting_approval", "planned", "building", "in_review", "blocked", "done"];
 
 function card(i: number, column: string) {
   return {
@@ -39,7 +39,7 @@ async function openBoard(page: Page, width: number, height: number) {
   await page.setViewportSize({ width, height });
   await mockTasks(page);
   await page.goto("/kanban");
-  await expect(page.locator(".kanban-column")).toHaveCount(6);
+  await expect(page.locator(".kanban-column")).toHaveCount(7);
   await expect(page.getByTestId("kanban-skel")).toHaveCount(0);
 }
 
@@ -89,12 +89,12 @@ test.describe("kanban board layout", () => {
       const gaps = await page
         .locator(".kanban-column-cards")
         .evaluateAll((els) => els.map((el) => window.innerHeight - el.getBoundingClientRect().bottom));
-      expect(gaps).toHaveLength(6);
+      expect(gaps).toHaveLength(7);
       for (const gap of gaps) expect(Math.abs(gap - pad)).toBeLessThanOrEqual(1);
     });
   }
 
-  test("1920x1000: all six columns are visible without sideways scroll", async ({ page }) => {
+  test("1920x1000: all seven columns are visible without sideways scroll", async ({ page }) => {
     await openBoard(page, 1920, 1000);
     const board = page.locator(".kanban-columns");
     expect(await board.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -102,7 +102,7 @@ test.describe("kanban board layout", () => {
       .locator(".kanban-column")
       .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
     for (const r of rights) expect(r).toBeLessThanOrEqual(1920);
-    // 1280 stays narrower than six 260px columns, so it scrolls sideways there.
+    // 1280 stays narrower than seven 248px columns (about 1832px with gaps), so it scrolls sideways there.
     await page.setViewportSize({ width: 1280, height: 900 });
     expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
   });
@@ -112,7 +112,7 @@ test.describe("kanban board layout", () => {
     await mockTasks(page, 800);
     await page.goto("/kanban");
 
-    await expect(page.locator(".kanban-column")).toHaveCount(6);
+    await expect(page.locator(".kanban-column")).toHaveCount(7);
     for (const col of await page.locator(".kanban-column").all()) {
       await expect(col.getByTestId("kanban-skel").first()).toBeVisible();
     }
