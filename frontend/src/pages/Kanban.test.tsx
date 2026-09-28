@@ -377,6 +377,28 @@ describe("Kanban", () => {
     expect(screen.queryByTestId("kanban-see-more-done")).not.toBeInTheDocument();
   });
 
+  it("shows skeleton cards in every column while the first tasks fetch is pending, then swaps them for the real board", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchMock = install([task({ column: "planned" })]);
+    const inner = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input) => {
+      if (String(input).startsWith("/api/tasks")) await gate;
+      return inner!(input);
+    });
+    renderKanban();
+
+    await waitFor(() => expect(screen.getAllByTestId("kanban-skel")).toHaveLength(18));
+    expect(screen.queryByTestId("kanban-empty")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kanban-end-done")).not.toBeInTheDocument();
+
+    release?.();
+    await waitFor(() => expect(screen.getByTestId("kanban-end-done")).toBeInTheDocument());
+    expect(screen.queryByTestId("kanban-skel")).not.toBeInTheDocument();
+  });
+
   it("shows an error state with retry when /api/tasks fails", async () => {
     const fetchMock = installFetchMock({
       "/api/projects": () => envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }),

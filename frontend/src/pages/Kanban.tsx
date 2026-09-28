@@ -139,14 +139,18 @@ export function Kanban({
           }
         />
       ) : (
-        <div className="kanban-columns" key={boardProject ?? "__all__"}>
+        <div className="kanban-columns" key={boardProject ?? "__all__"} aria-busy={tasks.isPending}>
           {COLUMNS.map((col) => (
             <div key={col.key}>
               <div className="kanban-column-head">
                 <span className="kanban-column-title">{col.title}</span>
-                <span className="kanban-column-count">{grouped[col.key].length}</span>
+                {!tasks.isPending && <span className="kanban-column-count">{grouped[col.key].length}</span>}
               </div>
               <div className="kanban-column-cards">
+                {tasks.isPending &&
+                  [0, 1, 2].map((i) => (
+                    <div key={i} className="kcard-skel skel" aria-hidden="true" data-testid="kanban-skel" />
+                  ))}
                 {grouped[col.key].slice(0, shown[col.key]).map((t) => (
                   <TaskCard
                     key={`${t.project}::${t.folder}`}
@@ -155,7 +159,7 @@ export function Kanban({
                     onClick={(project, folder) => onOpenTask(folder, "details", project)}
                   />
                 ))}
-                {grouped[col.key].length > shown[col.key] ? (
+                {tasks.isPending ? null : grouped[col.key].length > shown[col.key] ? (
                   <button
                     className="btn-block"
                     onClick={() => setShown((prev) => ({ ...prev, [col.key]: prev[col.key] + PAGE_SIZE }))}
