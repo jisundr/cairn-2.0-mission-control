@@ -145,11 +145,28 @@ export function Drilldown({ sessionId, activeTab, onTabChange, onBack }: Drilldo
     .flatMap((agent) => buildAgentTurns(agent.agent ?? "unknown", agent.trace, detailByPosition))
     .sort((a, b) => a.firstGlobalPosition - b.firstGlobalPosition);
 
+  // `turns` is recomputed fresh on every render (see the comment above), and
+  // its merge logic (buildAgentTurns) means the same array index can hold a
+  // tiny single-call "loading..." placeholder turn on one render and a much
+  // taller, fully-merged turn on the next, as call details stream in during
+  // scroll. Without `getItemKey`, react-virtual v3 caches each item's
+  // measured size by array index, so a resize like that gets misapplied to
+  // whatever now sits at that index - the previous turn's cached height
+  // stays attached to the new, differently-sized turn - producing the
+  // overlapping-bubbles bug this was keyed by index. `turn.key` is a stable,
+  // content-derived id (`${agentName}-${call.global_position}`, the first
+  // call in the turn), so it stays attached to the same underlying turn
+  // across renders regardless of which index it lives at; a call that gets
+  // absorbed into an earlier turn as a non-first call simply stops appearing
+  // as its own top-level key, which react-virtual handles the same as any
+  // other item leaving the list (it drops the stale cache entry, it doesn't
+  // require an append-only key set).
   const rowVirtualizer = useVirtualizer({
     count: turns.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 120,
     overscan: 5,
+    getItemKey: (index) => turns[index]?.key ?? index,
   });
 
   const virtualItems = rowVirtualizer.getVirtualItems();
