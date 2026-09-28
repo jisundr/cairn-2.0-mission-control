@@ -30,6 +30,37 @@
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   color-scheme: light dark;
 }
+/* Accent-theme presets (per-install, opt-in via lib/theme.ts's
+   applyAccentTheme setting document.documentElement.dataset.accentTheme).
+   Each overrides only --add/--add-bg/--add-line - never --remove or
+   --series-N. The attribute selector's specificity (0-2-0) beats the plain
+   :root default above regardless of source order, so "no preset chosen"
+   (attribute absent) keeps today's hardcoded green untouched. */
+:root[data-accent-theme="blue"] {
+  --add: #2b6cc4;
+  --add-bg: #e8f0fb;
+  --add-line: #3a80dd;
+}
+:root[data-accent-theme="purple"] {
+  --add: #7245c2;
+  --add-bg: #f0eaf9;
+  --add-line: #8a5cdb;
+}
+:root[data-accent-theme="pink"] {
+  --add: #c23b7a;
+  --add-bg: #fbe9f1;
+  --add-line: #d94f8f;
+}
+:root[data-accent-theme="teal"] {
+  --add: #158f8a;
+  --add-bg: #e6f6f5;
+  --add-line: #22ada6;
+}
+:root[data-accent-theme="amber"] {
+  --add: #b8760f;
+  --add-bg: #fbf0e0;
+  --add-line: #d38f1e;
+}
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #14140f;
@@ -54,6 +85,34 @@
     --series-6: #008300;
     --series-7: #9085e9;
     --series-8: #e66767;
+  }
+  /* Dark counterparts of the light-mode accent presets above - same ids,
+     brighter/lighter --add readable on --panel (#1a1a14), matching the
+     lightness relationship the default green already uses. */
+  :root[data-accent-theme="blue"] {
+    --add: #6badf5;
+    --add-bg: #17222f;
+    --add-line: #6badf5;
+  }
+  :root[data-accent-theme="purple"] {
+    --add: #b48ef2;
+    --add-bg: #241a30;
+    --add-line: #b48ef2;
+  }
+  :root[data-accent-theme="pink"] {
+    --add: #f281b8;
+    --add-bg: #301820;
+    --add-line: #f281b8;
+  }
+  :root[data-accent-theme="teal"] {
+    --add: #5fd6c9;
+    --add-bg: #16302d;
+    --add-line: #5fd6c9;
+  }
+  :root[data-accent-theme="amber"] {
+    --add: #f2b84f;
+    --add-bg: #302410;
+    --add-line: #f2b84f;
   }
 }
 * { box-sizing: border-box; }
