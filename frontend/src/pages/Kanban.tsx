@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProjects, useTasks } from "../api/hooks";
 import type { TaskCard as TaskCardData, TaskColumn } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
@@ -73,16 +73,21 @@ export function Kanban({
     ? (openTaskProject ?? allTasks.data?.find((t) => t.folder === openTask)?.project ?? null)
     : null;
 
-  // How many cards each column currently shows, reset to the first page
-  // when the board's project filter changes (see `kanban-columns`'s own
-  // `key` below - the same remount-to-reset pattern `TaskDrawer` already
-  // uses on a folder/project change).
+  // How many cards each column currently shows. `shown` is owned by this
+  // component - one level above the `kanban-columns` div's own `key` below
+  // - so changing that div's key on a project-filter change remounts the
+  // column markup but does not reset this state; the effect below resets it
+  // explicitly instead whenever `boardProject` changes.
   const [shown, setShown] = useState<Record<TaskColumn, number>>({
     ready: PAGE_SIZE,
     needs_attention: PAGE_SIZE,
     ongoing: PAGE_SIZE,
     done: PAGE_SIZE,
   });
+
+  useEffect(() => {
+    setShown({ ready: PAGE_SIZE, needs_attention: PAGE_SIZE, ongoing: PAGE_SIZE, done: PAGE_SIZE });
+  }, [boardProject]);
 
   const grouped: Record<TaskColumn, TaskCardData[]> = {
     ready: [],

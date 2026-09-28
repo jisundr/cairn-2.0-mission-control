@@ -1,4 +1,5 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskCard } from "../api/types";
 import { _resetAttentionModuleStateForTests } from "../lib/attention";
@@ -51,6 +52,40 @@ function renderKanban(overrides: Partial<Parameters<typeof Kanban>[0]> = {}) {
       {...overrides}
     />,
   );
+}
+
+// Only the project-filter-change regression test below needs to rerender
+// with new props against the *same* QueryClient (so its cache/query-key
+// change is real, not a fresh mount) - `renderKanban`/`renderWithClient`
+// don't expose the client for that, so this wraps `Kanban` the same way but
+// keeps a `rerenderKanban` that reuses it.
+function renderKanbanRerenderable(overrides: Partial<Parameters<typeof Kanban>[0]> = {}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } });
+  const props: Parameters<typeof Kanban>[0] = {
+    activeTab: "kanban",
+    onTabChange: noop,
+    openTask: null,
+    openTaskProject: null,
+    drawerTab: "details",
+    onOpenTask: noop,
+    boardProject: undefined,
+    onBoardProjectChange: noop,
+    ...overrides,
+  };
+  const result = render(
+    <QueryClientProvider client={client}>
+      <Kanban {...props} />
+    </QueryClientProvider>,
+  );
+  return {
+    ...result,
+    rerenderKanban: (nextOverrides: Partial<Parameters<typeof Kanban>[0]>) =>
+      result.rerender(
+        <QueryClientProvider client={client}>
+          <Kanban {...{ ...props, ...nextOverrides }} />
+        </QueryClientProvider>,
+      ),
+  };
 }
 
 describe("Kanban", () => {
@@ -256,6 +291,42 @@ describe("Kanban", () => {
     }
     expect(screen.queryByTestId("kanban-see-more-ready")).not.toBeInTheDocument();
     expect(screen.getByTestId("kanban-end-ready")).toHaveTextContent("End of Ready");
+  });
+
+  it("resets a column's paging back to page 1 when the board's project filter changes, even after paging past the end (shown state is owned by Kanban itself, one level above the keyed kanban-columns subtree)", async () => {
+    const readyTasksFor = (project: string) =>
+      Array.from({ length: 25 }, (_, i) =>
+        task({ folder: `docs/tasks/2026-09-01-0900-${project}-ready-${i}`, column: "ready", project }),
+      );
+    installFetchMock({
+      "/api/projects": () =>
+        envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "project-a", parent: null },
+            { label: "project-b", parent: null },
+          ],
+        }),
+      "/api/tasks": (params) => envelope(readyTasksFor(params.get("project") ?? "project-a")),
+    });
+    const { rerenderKanban } = renderKanbanRerenderable({ boardProject: "project-a" });
+
+    // Page past the end of project-a's ready column (25 cards, PAGE_SIZE 20
+    // - one "See more" click reveals all 25 and replaces the button with the
+    // end marker).
+    await waitFor(() => expect(screen.getByTestId("kanban-see-more-ready")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("kanban-see-more-ready"));
+    await waitFor(() => expect(screen.getByTestId("kanban-end-ready")).toBeInTheDocument());
+
+    rerenderKanban({ boardProject: "project-b" });
+
+    // project-b also has 25 ready cards - if `shown.ready` had carried over
+    // (the bug), the end marker would still be showing all 25. A real reset
+    // brings back the first page only, with "See more" reappearing.
+    await waitFor(() => expect(screen.getByTestId("kanban-see-more-ready")).toBeInTheDocument());
+    expect(screen.getByTestId("task-card-docs/tasks/2026-09-01-0900-project-b-ready-0")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-card-docs/tasks/2026-09-01-0900-project-b-ready-24")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kanban-end-ready")).not.toBeInTheDocument();
   });
 
   it("shows the end marker on a column with no cards, without triggering the board's own all-empty state", async () => {
