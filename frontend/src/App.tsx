@@ -151,7 +151,12 @@ export function App() {
         // resolves it instead, same as a hard reload.
         setOpenTaskProject(null);
         setDrawerTab(view.drawerTab ?? "details");
-        setBoardProject(view.boardProject);
+        // parseView only ever populates `boardProject` on the /kanban path -
+        // a popstate landing on Overview/Sessions never carries a `project`
+        // param, so only touch `boardProject` when the landing view is
+        // actually Kanban. Otherwise leave it as-is, mirroring how
+        // `navigateToTab` preserves it by never calling `setBoardProject`.
+        if (view.tab === "kanban") setBoardProject(view.boardProject);
       }
     }
     window.addEventListener("popstate", onPopState);

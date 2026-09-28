@@ -131,4 +131,52 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByTestId("install-scope-chip")).toHaveTextContent("project-b"));
   });
+
+  // Regression (review finding on 4037070): `onPopState`'s shared non-
+  // session branch used to call `setBoardProject(view.boardProject)`
+  // unconditionally - but `parseView` only ever populates `boardProject` on
+  // the /kanban path, so a popstate landing on Sessions or Overview (never
+  // carrying `?project=`) silently cleared it, even though the user never
+  // touched Kanban's filter in that navigation.
+  it("keeps the Kanban project filter across a popstate landing on a non-Kanban tab", async () => {
+    window.history.pushState(null, "", "/kanban?project=project-b");
+    installFetchMock({
+      "/api/projects": () =>
+        envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "project-a", parent: null },
+            { label: "project-b", parent: null },
+          ],
+        }),
+      "/api/tasks": (params) => {
+        const project = params.get("project");
+        const tasks = [
+          task({ project: "project-a" }),
+          task({ project: "project-b", folder: "docs/tasks/2026-09-02-0900-other" }),
+        ];
+        return envelope(project ? tasks.filter((t) => t.project === project) : tasks);
+      },
+      "/api/rollup/session": () => envelope([SESSION]),
+    });
+    renderWithClient(<App />);
+
+    // Confirm the filter is actually applied before navigating away.
+    await waitFor(() => expect(screen.getByTestId("install-scope-chip")).toHaveTextContent("project-b"));
+
+    // Simulate the user's own navigation landing back on Sessions via
+    // Back - `/sessions` never had a `project` param.
+    window.history.pushState(null, "", "/sessions");
+    fireEvent.popState(window);
+    await waitFor(() => expect(screen.getByTestId("sessions-table")).toBeInTheDocument());
+
+    // Returning to Kanban (a normal tab click, not another popstate) should
+    // still carry the filter set before the trip to Sessions - proof
+    // `boardProject` was never clobbered by the intervening popstate.
+    fireEvent.click(screen.getByRole("link", { name: "Kanban" }));
+
+    await waitFor(() => expect(screen.getByTestId("install-scope-chip")).toHaveTextContent("project-b"));
+    expect(screen.getByTestId("task-card-docs/tasks/2026-09-02-0900-other")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-card-docs/tasks/2026-09-01-0900-ready-one")).not.toBeInTheDocument();
+  });
 });
