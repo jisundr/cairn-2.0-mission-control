@@ -86,3 +86,30 @@ if (typeof HTMLMediaElement !== "undefined") {
   HTMLMediaElement.prototype.play = () => Promise.resolve();
   HTMLMediaElement.prototype.pause = () => {};
 }
+
+// jsdom has no real canvas 2D context (HTMLCanvasElement.getContext returns
+// null and logs "Not implemented" without the optional `canvas` npm
+// package). The favicon badge (PRD §6.9, `lib/attention.ts`) already
+// no-ops on a null context, so this is cosmetic stderr noise in every test
+// that mounts `AppHeader`, not a real failure - a global no-op stub silences
+// it; `attention.test.ts` overrides this per-suite via `vi.spyOn` where it
+// actually asserts on canvas calls.
+if (typeof HTMLCanvasElement !== "undefined") {
+  const noopCtx = {
+    clearRect() {},
+    fillRect() {},
+    fillText() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    stroke() {},
+    set fillStyle(_v: string) {},
+    set strokeStyle(_v: string) {},
+    set lineWidth(_v: number) {},
+    set font(_v: string) {},
+    set textAlign(_v: string) {},
+    set textBaseline(_v: string) {},
+  } as unknown as CanvasRenderingContext2D;
+  HTMLCanvasElement.prototype.getContext = (() => noopCtx) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.toDataURL = () => "data:image/png;base64,";
+}
