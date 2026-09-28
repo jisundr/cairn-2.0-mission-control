@@ -312,6 +312,14 @@ def _in_review_fact(key_info: str) -> bool:
     return bool(_REVIEW_WORD_RE.search(key_info or ""))
 
 
+_BLOCKED_WORD_RE = re.compile(r"\bblocked\b", re.IGNORECASE)
+
+
+def _blocked_fact(key_info: str) -> bool:
+    """Heuristic: `key_info` names blocked as a whole word (`unblocked` does not match)."""
+    return bool(_BLOCKED_WORD_RE.search(key_info or ""))
+
+
 def _plan_merely_approved(key_info: str) -> bool:
     """`cairn:shared` overwrites `key_info` with `approved` plus the next
     step on approval, so a leading `approved` reads as not yet started."""
@@ -394,11 +402,13 @@ def _done_fact(kind: str, key_info: str, folder_name: str, project_root: Path, g
 
 
 def _column(*, kind: str, key_info: str, has_plan: bool, done: bool, active: bool) -> str:
-    """First-match-wins lifecycle stage: done -> awaiting_approval ->
+    """First-match-wins lifecycle stage: done -> blocked -> awaiting_approval ->
     scoping (research kind, or no PLAN.md) -> in_review -> building (active,
     or a plan not merely approved) -> planned."""
     if done:
         return "done"
+    if _blocked_fact(key_info):
+        return "blocked"
     if _awaiting_approval_fact(key_info):
         return "awaiting_approval"
     if kind == "research" or not has_plan:

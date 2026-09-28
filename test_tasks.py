@@ -347,7 +347,7 @@ def _stage(key_info="", *, kind="build", has_plan=True, done=False, active=False
     return tasks._column(kind=kind, key_info=key_info, has_plan=has_plan, done=done, active=active)
 
 
-def test_column_precedence_across_the_six_stages():
+def test_column_precedence_across_the_seven_stages():
     assert _stage(done=True, key_info="awaiting plan approval", has_plan=False) == "done"
     assert _stage("awaiting plan approval", has_plan=False) == "awaiting_approval"
     assert _stage("awaiting requirements approval") == "awaiting_approval"
@@ -357,6 +357,15 @@ def test_column_precedence_across_the_six_stages():
     assert _stage("approved; next: builder") == "planned"
     assert _stage("approved; next: builder", active=True) == "building"
     assert _stage("implementing step 2") == "building"
+    assert _stage("blocked on X") == "blocked"
+    assert _stage("Blocked: waiting") == "blocked"
+    assert _stage("blocked on X", has_plan=False) == "blocked"
+    assert _stage("blocked", kind="research") == "blocked"
+    assert _stage("awaiting plan approval blocked") == "blocked"
+    assert _stage("blocked", done=True) == "done"
+    assert _stage("blocked", active=True) == "blocked"
+    assert _stage("unblocked, reviewer running") == "in_review"
+    assert _stage("reviewer blocked") == "blocked"
 
 
 # --------------------------------------------------------------------------
@@ -671,6 +680,8 @@ def test_build_cards_derives_each_stage_from_folder_contents_and_key_info(tmp_pa
         "2026-01-06-0000-build-f": ("reviewer running", True, "in_review"),
         "2026-01-07-0000-build-g": ("Done, closed.", True, "done"),
         "2026-01-08-0000-build-h": ("implementing step 2", True, "building"),
+        "2026-01-09-0000-build-i": ("blocked on X", True, "blocked"),
+        "2026-01-10-0000-build-j": ("unblocked", True, "building"),
     }
     for name, (key_info, plan, _) in cases.items():
         write_state(tasks_dir / name, key_info=key_info)
@@ -706,6 +717,42 @@ def test_build_cards_fresh_heartbeat_on_approved_plan_is_building_and_active(tmp
     card = tasks.build_cards([_Project("proj", root)], heartbeat_dir=heartbeat_dir)[0]
     assert card["column"] == "building"
     assert card["active"] is True
+
+
+def test_build_cards_blocked_keeps_needs_attention_and_active_badges(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    a = root / "docs/tasks/2026-01-01-0000-build-a"
+    b = root / "docs/tasks/2026-01-02-0000-build-b"
+    write_state(a, key_info="needs-human: blocked on X")
+    write_state(b, key_info="blocked on Y")
+    for f in (a, b):
+        (f / "PLAN.md").write_text("plan\n")
+    heartbeat_dir = tmp_path / "active"
+    heartbeat_dir.mkdir()
+    (heartbeat_dir / "s.json").write_text('{"project": "%s", "task": "docs/tasks/2026-01-02-0000-build-b"}' % str(root))
+
+    by = {c["folder"].rsplit("/", 1)[1]: c for c in tasks.build_cards([_Project("proj", root)], heartbeat_dir=heartbeat_dir)}
+    assert by["2026-01-01-0000-build-a"]["column"] == "blocked"
+    assert by["2026-01-01-0000-build-a"]["needs_attention"] is True
+    assert by["2026-01-02-0000-build-b"]["column"] == "blocked"
+    assert by["2026-01-02-0000-build-b"]["active"] is True
+
+
+def test_blocked_child_is_not_done_in_sub_task_counts_and_detail(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    (root / ".harness").mkdir(parents=True)
+    (root / ".harness" / "workflow.md").write_text("## Branching\n- Direct commits to main, no feature branches\n")
+    parent = root / "docs/tasks/2026-01-01-0000-build-parent"
+    write_state(parent, key_info="in progress")
+    write_state(parent / "01-a", key_info="blocked on X")
+    write_state(parent / "02-b", key_info="Done, closed.")
+
+    cards = {c["folder"]: c for c in tasks.build_cards([_Project("proj", root)])}
+    assert cards["docs/tasks/2026-01-01-0000-build-parent"]["sub_tasks"] == {"done": 1, "total": 2}
+    detail = tasks.build_detail(_Project("proj", root), parent)
+    subs = {e["folder"].rsplit("/", 1)[1]: e for e in detail["sub_tasks"]}
+    assert subs["01-a"]["column"] == "blocked"
+    assert subs["02-b"]["column"] == "done"
 
 
 def test_build_detail_reports_needs_attention_and_active_per_folder_and_sub_task(tmp_path):
