@@ -495,6 +495,25 @@ def test_build_cards_a_timed_touch_outranks_a_same_day_date_only_touch(tmp_path)
     ]
 
 
+def test_build_cards_returns_last_log_time_from_a_timed_last_line(tmp_path):
+    root = tmp_path / "proj"
+    write_state(root / "docs/tasks/2026-01-01-0000-build-timed", body="- 2026-09-15 14:30: continued.\n")
+
+    cards = tasks.build_cards([_Project("proj", root)])
+
+    assert cards[0]["last_log_date"] == "2026-09-15"
+    assert cards[0]["last_log_time"] == "14:30"
+
+
+def test_build_cards_returns_empty_last_log_time_for_a_date_only_last_line(tmp_path):
+    root = tmp_path / "proj"
+    write_state(root / "docs/tasks/2026-01-01-0000-build-untimed", body="- 2026-09-15: started.\n")
+
+    cards = tasks.build_cards([_Project("proj", root)])
+
+    assert cards[0]["last_log_time"] == ""
+
+
 def test_build_cards_handles_a_review_folder_with_only_a_draft_md(tmp_path):
     root = tmp_path / "proj"
     folder = root / "docs/tasks/2026-01-05-0000-review-org-repo-pr-9"

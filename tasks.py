@@ -507,6 +507,7 @@ def _card_fields(
         "goal": goal,
         "key_info": key_info,
         "last_log_date": last_log_date,
+        "last_log_time": last_log_time,
         "column": _column(kind=kind, key_info=key_info, has_plan=has_plan, done=done, active=active),
         "active": active,
         "needs_attention": needs_attention,
