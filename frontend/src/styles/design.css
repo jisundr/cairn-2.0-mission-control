@@ -503,7 +503,7 @@ table.sessions a.sess:hover { text-decoration: underline; }
    rather than relying on a definition HbarList no longer provides). ---- */
 .hbar-track { background: var(--border-soft); border-radius: 3px; overflow: hidden; }
 .hbar-fill { height: 100%; background: var(--add); }
-.kanban-columns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
+.kanban-columns { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; align-items: start; }
 .kanban-column-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 10px; }
 .kanban-column-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
 .kanban-column-count { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink-faint); background: var(--border-soft); border-radius: 10px; padding: 1px 7px; }

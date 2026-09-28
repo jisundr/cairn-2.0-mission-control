@@ -63,8 +63,8 @@ export function TaskCard({ task, showProject, onClick }: TaskCardProps) {
       )}
       <div className="kcard-foot">
         <span className="kcard-date">last touched {formatDateLabel(task.last_log_date)}</span>
-        {task.column === "needs_attention" && <span className="kcard-attn">{attentionLabel(task.key_info)}</span>}
-        {task.column === "ongoing" && (
+        {task.needs_attention && <span className="kcard-attn">{attentionLabel(task.key_info)}</span>}
+        {task.active && (
           <span className="kcard-ongoing">
             <span className="status-dot" />
             active

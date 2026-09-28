@@ -6,7 +6,7 @@ import type { TaskCard } from "../api/types";
 // navigating between tabs: AppHeader (this module's only consumer) is
 // unmounted and remounted on every tab switch (each page owns its own
 // <AppHeader> instance, per App.tsx's own routing comment), so a per-
-// component ref/state for "the previous poll's Needs Attention set" or
+// component ref/state for "the previous poll's needs-attention set" or
 // "has the chime been armed yet" would reset on every navigation and could
 // misfire. Module-level state instead persists for the life of the page (a
 // real reload resets it, matching PRD §6.9's "armed for the rest of that
@@ -15,14 +15,14 @@ import type { TaskCard } from "../api/types";
 export const BASE_TITLE = "~/ cairn/mission-control";
 
 export function needsAttentionCount(tasks: TaskCard[] | undefined): number {
-  return (tasks ?? []).filter((t) => t.column === "needs_attention").length;
+  return (tasks ?? []).filter((t) => t.needs_attention).length;
 }
 
 export function titleForCount(count: number): string {
   return count > 0 ? `(${count}) Mission Control` : BASE_TITLE;
 }
 
-// Short display label for a Needs Attention card's badge (TaskCard.tsx) -
+// Short display label for a needs-attention card's badge (TaskCard.tsx) -
 // `/api/tasks` gives the raw `key_info` string plus the boolean facts
 // (transparency, not left for the frontend to re-derive per PRD §9), but
 // not a canonical short label, so this matches the same trigger phrases
@@ -30,8 +30,6 @@ export function titleForCount(count: number): string {
 export function attentionLabel(keyInfo: string): string {
   if (/needs-human/.test(keyInfo)) return "needs-human";
   if (/stalled/.test(keyInfo)) return "stalled";
-  if (/awaiting requirements approval/i.test(keyInfo)) return "awaiting approval";
-  if (/awaiting plan approval/i.test(keyInfo)) return "awaiting approval";
   return "needs attention";
 }
 
@@ -49,7 +47,7 @@ let armListenerAttached = false;
 // baseline and returns nothing: a page load that already has existing
 // Needs Attention cards must never itself chime.
 export function newAttentionKeys(tasks: TaskCard[] | undefined): string[] {
-  const current = new Set((tasks ?? []).filter((t) => t.column === "needs_attention").map(attentionKey));
+  const current = new Set((tasks ?? []).filter((t) => t.needs_attention).map(attentionKey));
   const previous = previousAttentionKeys;
   previousAttentionKeys = current;
   if (previous === null) return [];

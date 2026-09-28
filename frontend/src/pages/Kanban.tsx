@@ -33,9 +33,11 @@ interface KanbanProps {
 }
 
 const COLUMNS: { key: TaskColumn; title: string }[] = [
-  { key: "ready", title: "Ready" },
-  { key: "needs_attention", title: "Needs Attention" },
-  { key: "ongoing", title: "Ongoing" },
+  { key: "scoping", title: "Scoping" },
+  { key: "awaiting_approval", title: "Awaiting approval" },
+  { key: "planned", title: "Planned" },
+  { key: "building", title: "Building" },
+  { key: "in_review", title: "In review" },
   { key: "done", title: "Done" },
 ];
 
@@ -43,9 +45,11 @@ const COLUMNS: { key: TaskColumn; title: string }[] = [
 // fixed, implementation-chosen page size, not derived from the API.
 const PAGE_SIZE = 20;
 
+const initialShown = () => Object.fromEntries(COLUMNS.map((c) => [c.key, PAGE_SIZE])) as Record<TaskColumn, number>;
+
 // pages/Kanban.tsx per `board-single-project.html`/`board-multi-project.
 // html`/`board-empty.html`/`board-error.html` (PRD §6.1-§6.4) - fetches the
-// flat `/api/tasks` list and groups it into 4 columns client-side, same
+// flat `/api/tasks` list and groups it into 6 stage columns client-side, same
 // division of labor as every other list-shaped page in this app. Reuses
 // AppHeader/InstallScopeRow verbatim (§9's install-type-reuse note - no new
 // UI for single- vs. multi-project); the pill/title/favicon/chime (§6.9)
@@ -78,24 +82,17 @@ export function Kanban({
   // - so changing that div's key on a project-filter change remounts the
   // column markup but does not reset this state; the effect below resets it
   // explicitly instead whenever `boardProject` changes.
-  const [shown, setShown] = useState<Record<TaskColumn, number>>({
-    ready: PAGE_SIZE,
-    needs_attention: PAGE_SIZE,
-    ongoing: PAGE_SIZE,
-    done: PAGE_SIZE,
-  });
+  const [shown, setShown] = useState<Record<TaskColumn, number>>(initialShown);
 
   useEffect(() => {
-    setShown({ ready: PAGE_SIZE, needs_attention: PAGE_SIZE, ongoing: PAGE_SIZE, done: PAGE_SIZE });
+    setShown(initialShown());
   }, [boardProject]);
 
-  const grouped: Record<TaskColumn, TaskCardData[]> = {
-    ready: [],
-    needs_attention: [],
-    ongoing: [],
-    done: [],
-  };
-  for (const t of tasks.data ?? []) grouped[t.column].push(t);
+  const grouped = Object.fromEntries(COLUMNS.map((c) => [c.key, [] as TaskCardData[]])) as Record<
+    TaskColumn,
+    TaskCardData[]
+  >;
+  for (const t of tasks.data ?? []) grouped[t.column]?.push(t);
 
   return (
     <div className="shell">

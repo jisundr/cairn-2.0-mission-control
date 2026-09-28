@@ -152,9 +152,9 @@ export interface ApiError {
 
 // Kanban board (v2, PRD §9) - one card per `docs/tasks/*/` folder (and its
 // sub-task children), across every known project. `column` is the backend's
-// own §6.2 precedence result; `active`/`needs_attention`/`done` are the raw
-// contributing facts, kept for transparency rather than re-derived here.
-export type TaskColumn = "ready" | "needs_attention" | "ongoing" | "done";
+// own derived lifecycle stage; `active`/`needs_attention` are orthogonal badge
+// facts (any column), kept for transparency rather than re-derived here.
+export type TaskColumn = "scoping" | "awaiting_approval" | "planned" | "building" | "in_review" | "done";
 export type TaskKind = "build" | "research" | "review";
 
 export interface TaskSubTasksSummary {
@@ -201,6 +201,8 @@ export interface ActivityEntry {
 export interface TaskSubTaskEntry {
   folder: string;
   column: TaskColumn;
+  active: boolean;
+  needs_attention: boolean;
   goal: string;
 }
 
@@ -216,6 +218,8 @@ export interface TaskDetail {
   parent: string | null;
   kind: TaskKind;
   column: TaskColumn;
+  active: boolean;
+  needs_attention: boolean;
   frontmatter: TaskFrontmatter;
   activity: ActivityEntry[] | null;
   draft_content: string | null;

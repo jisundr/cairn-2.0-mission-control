@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import Markdown from "markdown-to-jsx";
 import { useTaskDetail, useTaskDoc } from "../api/hooks";
 import type { TaskColumn, TaskDetail, TaskDoc } from "../api/types";
+import { attentionLabel } from "../lib/attention";
 import { taskDisplayName } from "../lib/format";
 
 interface TaskDrawerProps {
@@ -37,7 +38,7 @@ export function TaskDrawer({ project, folder, tab, onClose, onTabChange, onOpenT
             {data && (
               <div className="drawer-badges">
                 <span className="kcard-kind">{data.kind}</span>
-                <ColumnBadge column={data.column} />
+                <ColumnBadge column={data.column} active={data.active} needsAttention={data.needs_attention} keyInfo={data.frontmatter.key_info} />
                 {data.parent && (
                   <button
                     type="button"
@@ -110,30 +111,48 @@ export function TaskDrawer({ project, folder, tab, onClose, onTabChange, onOpenT
 }
 
 const COLUMN_LABEL: Record<TaskColumn, string> = {
-  ready: "Ready",
-  needs_attention: "needs attention",
-  ongoing: "Ongoing",
+  scoping: "Scoping",
+  awaiting_approval: "Awaiting approval",
+  planned: "Planned",
+  building: "Building",
+  in_review: "In review",
   done: "Done",
 };
 
-function ColumnBadge({ column, variant = "default" }: { column: TaskColumn; variant?: "default" | "subtask" }) {
+function ColumnBadge({
+  column,
+  active,
+  needsAttention,
+  keyInfo,
+  variant = "default",
+}: {
+  column: TaskColumn;
+  active: boolean;
+  needsAttention: boolean;
+  keyInfo?: string;
+  variant?: "default" | "subtask";
+}) {
   const modifier = variant === "subtask" ? " subtask-badge" : "";
-  if (column === "needs_attention") return <span className={`kcard-attn${modifier}`}>{COLUMN_LABEL[column]}</span>;
-  if (column === "ongoing") {
-    return (
-      <span className={`kcard-ongoing${modifier}`}>
-        <span className="status-dot" />
-        {COLUMN_LABEL[column]}
-      </span>
-    );
-  }
-  return <span className={`kcard-kind${modifier}`}>{COLUMN_LABEL[column]}</span>;
+  return (
+    <>
+      <span className={`kcard-kind${modifier}`}>{COLUMN_LABEL[column]}</span>
+      {needsAttention && (
+        <span className={`kcard-attn${modifier}`}>{keyInfo ? attentionLabel(keyInfo) : "needs attention"}</span>
+      )}
+      {active && (
+        <span className={`kcard-ongoing${modifier}`}>
+          <span className="status-dot" />
+          active
+        </span>
+      )}
+    </>
+  );
 }
 
 // A paste-ready prompt for handing this task to a fresh session: a "resume"
 // framing built around key_info (what's blocking/current state) for
-// needs_attention, a "start" framing built around goal/done_when for ready -
-// the two columns PromptComposer renders for. Wording/format are a
+// needs_attention, a "start" framing built around goal/done_when for planned -
+// the two cases PromptComposer renders for. Wording/format are a
 // build-time call (REQUIREMENTS.md Constraints); the fixed contract is just
 // that it's non-empty whenever the relevant frontmatter fields exist and
 // always names the project/folder so a fresh session knows where to look.
@@ -142,7 +161,7 @@ function buildPrompt(data: TaskDetail): string {
   const location = `Task: ${data.project} — ${data.folder}`;
   const doc = fm.path ? `Requirements doc: ${fm.path}` : null;
 
-  if (data.column === "needs_attention") {
+  if (data.needs_attention) {
     return [
       `Resume this task.`,
       location,
@@ -165,7 +184,7 @@ function buildPrompt(data: TaskDetail): string {
     .join("\n");
 }
 
-// Prompt composer (§6.8) - needs_attention (a "resume" framing) and ready (a
+// Prompt composer (§6.8) - needs-attention (a "resume" framing) and planned (a
 // "start" framing) cards, rendered above the frontmatter table. Uncontrolled
 // textarea (a ref, not state): the "Copy" button just needs the field's
 // current value at click time, and nothing else in this component (or
@@ -175,7 +194,7 @@ function buildPrompt(data: TaskDetail): string {
 function PromptComposer({ data }: { data: TaskDetail }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [copied, setCopied] = useState(false);
-  const isAttention = data.column === "needs_attention";
+  const isAttention = data.needs_attention;
 
   return (
     <div className={isAttention ? "reply-composer" : "reply-composer start"} data-testid="reply-composer">
@@ -233,7 +252,7 @@ function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (proje
 
   return (
     <>
-      {(data.column === "needs_attention" || data.column === "ready") && <PromptComposer data={data} />}
+      {(data.needs_attention || data.column === "planned") && <PromptComposer data={data} />}
 
       <div className="drawer-section">
         <div className="drawer-section-title">Details</div>
@@ -263,7 +282,7 @@ function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (proje
               >
                 <span className="subtask-name">{taskDisplayName(st.folder)}</span>
                 <span className="subtask-goal">{st.goal}</span>
-                <ColumnBadge column={st.column} variant="subtask" />
+                <ColumnBadge column={st.column} active={st.active} needsAttention={st.needs_attention} variant="subtask" />
               </button>
             ))}
           </div>
