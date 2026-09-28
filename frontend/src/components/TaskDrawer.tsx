@@ -116,17 +116,18 @@ const COLUMN_LABEL: Record<TaskColumn, string> = {
   done: "Done",
 };
 
-function ColumnBadge({ column }: { column: TaskColumn }) {
-  if (column === "needs_attention") return <span className="kcard-attn">{COLUMN_LABEL[column]}</span>;
+function ColumnBadge({ column, variant = "default" }: { column: TaskColumn; variant?: "default" | "subtask" }) {
+  const modifier = variant === "subtask" ? " subtask-badge" : "";
+  if (column === "needs_attention") return <span className={`kcard-attn${modifier}`}>{COLUMN_LABEL[column]}</span>;
   if (column === "ongoing") {
     return (
-      <span className="kcard-ongoing">
+      <span className={`kcard-ongoing${modifier}`}>
         <span className="status-dot" />
         {COLUMN_LABEL[column]}
       </span>
     );
   }
-  return <span className="kcard-kind">{COLUMN_LABEL[column]}</span>;
+  return <span className={`kcard-kind${modifier}`}>{COLUMN_LABEL[column]}</span>;
 }
 
 // A paste-ready prompt for handing this task to a fresh session: a "resume"
@@ -262,7 +263,7 @@ function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (proje
               >
                 <span className="subtask-name">{taskDisplayName(st.folder)}</span>
                 <span className="subtask-goal">{st.goal}</span>
-                <ColumnBadge column={st.column} />
+                <ColumnBadge column={st.column} variant="subtask" />
               </button>
             ))}
           </div>

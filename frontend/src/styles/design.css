@@ -551,6 +551,15 @@ table.detail .dt-val.mono { font-family: var(--mono); font-size: 12px; }
 .subtask-row:hover .subtask-name { color: var(--add); }
 .subtask-name { font-size: 12.5px; font-weight: 600; color: var(--ink); }
 .subtask-goal { font-size: 11.5px; color: var(--ink-faint); flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ColumnBadge's `variant="subtask"` modifier - the full-size solid-fill
+   badge reads as too heavy at this row's smaller 11.5-12.5px text; an
+   outlined treatment (same existing tokens, no new fill) stays legible
+   without competing with the row's own text for attention. */
+.subtask-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
+.kcard-attn.subtask-badge { background: transparent; border: 1px solid var(--remove); }
+.kcard-kind.subtask-badge { background: transparent; border: 1px solid var(--border); }
+.kcard-ongoing.subtask-badge { gap: 4px; }
+.kcard-ongoing.subtask-badge .status-dot { width: 5px; height: 5px; }
 
 /* Docs tab (PRD §6.6): GitLab's own file-browser layout, per the request -
    a persistent left sidebar (file tree) beside a main content pane, not a

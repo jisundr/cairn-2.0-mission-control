@@ -101,6 +101,7 @@ describe("TaskDrawer", () => {
     fireEvent.click(screen.getByTestId("subtask-row-docs/tasks/parent/01-first"));
     expect(onOpenTask).toHaveBeenCalledWith("cairn-2.0", "docs/tasks/parent/01-first");
     expect(fetchMock).toHaveBeenCalled();
+    expect(document.querySelector(".kcard-attn.subtask-badge")).not.toBeNull();
   });
 
   it("Docs tab renders the file list and fetches a doc's content only once clicked", async () => {
