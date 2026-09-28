@@ -30,6 +30,23 @@ describe("formatLastTouched", () => {
     expect(formatLastTouched("2026-09-29", "09:45", now)).toBe("15m ago");
   });
 
+  it("switches to days from 24 hours on", () => {
+    const now = new Date("2026-09-29T10:00:00Z");
+    expect(formatLastTouched("2026-09-28", "10:00", now)).toBe("1d ago");
+    expect(formatLastTouched("2026-09-28", "09:00", now)).toBe("1d ago");
+    expect(formatLastTouched("2026-09-22", "10:00", now)).toBe("7d ago");
+  });
+
+  it("falls back to the date label for a future time beyond the skew allowance", () => {
+    const now = new Date("2026-09-29T10:00:00Z");
+    expect(formatLastTouched("2026-09-29", "10:15", now)).toBe(formatDateLabel("2026-09-29", now));
+  });
+
+  it("treats a small future skew as just now", () => {
+    const now = new Date("2026-09-29T10:00:00Z");
+    expect(formatLastTouched("2026-09-29", "10:02", now)).toBe("0s ago");
+  });
+
   it("falls back to the date label when the time is empty", () => {
     const now = new Date("2026-09-29T10:00:00Z");
     expect(formatLastTouched("2019-01-05", "", now)).toBe(formatDateLabel("2019-01-05"));
