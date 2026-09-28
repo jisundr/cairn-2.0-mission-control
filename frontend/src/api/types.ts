@@ -154,7 +154,7 @@ export interface ApiError {
 // sub-task children), across every known project. `column` is the backend's
 // own derived lifecycle stage; `active`/`needs_attention` are orthogonal badge
 // facts (any column), kept for transparency rather than re-derived here.
-export type TaskColumn = "scoping" | "awaiting_approval" | "planned" | "building" | "in_review" | "done";
+export type TaskColumn = "scoping" | "awaiting_approval" | "planned" | "building" | "in_review" | "blocked" | "done";
 export type TaskKind = "build" | "research" | "review";
 
 export interface TaskSubTasksSummary {

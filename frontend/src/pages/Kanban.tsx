@@ -38,6 +38,7 @@ const COLUMNS: { key: TaskColumn; title: string }[] = [
   { key: "planned", title: "Planned" },
   { key: "building", title: "Building" },
   { key: "in_review", title: "In review" },
+  { key: "blocked", title: "Blocked" },
   { key: "done", title: "Done" },
 ];
 
@@ -49,7 +50,7 @@ const initialShown = () => Object.fromEntries(COLUMNS.map((c) => [c.key, PAGE_SI
 
 // pages/Kanban.tsx per `board-single-project.html`/`board-multi-project.
 // html`/`board-empty.html`/`board-error.html` (PRD §6.1-§6.4) - fetches the
-// flat `/api/tasks` list and groups it into 6 stage columns client-side, same
+// flat `/api/tasks` list and groups it into 7 stage columns client-side, same
 // division of labor as every other list-shaped page in this app. Reuses
 // AppHeader/InstallScopeRow verbatim (§9's install-type-reuse note - no new
 // UI for single- vs. multi-project); the pill/title/favicon/chime (§6.9)

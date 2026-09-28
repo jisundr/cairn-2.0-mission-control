@@ -116,6 +116,7 @@ const COLUMN_LABEL: Record<TaskColumn, string> = {
   planned: "Planned",
   building: "Building",
   in_review: "In review",
+  blocked: "Blocked",
   done: "Done",
 };
 

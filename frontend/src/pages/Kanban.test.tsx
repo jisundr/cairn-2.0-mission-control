@@ -96,7 +96,7 @@ describe("Kanban", () => {
     _resetAttentionModuleStateForTests();
   });
 
-  it("renders the six lifecycle stage columns in order", async () => {
+  it("renders the seven lifecycle stage columns in order", async () => {
     install([task()]);
     renderKanban();
 
@@ -108,6 +108,7 @@ describe("Kanban", () => {
       "Planned",
       "Building",
       "In review",
+      "Blocked",
       "Done",
     ]);
   });
@@ -141,6 +142,12 @@ describe("Kanban", () => {
       task({ folder: "docs/tasks/2026-09-03-0900-ongoing-one", column: "in_review" }),
       task({ folder: "docs/tasks/2026-09-04-0900-done-one", column: "done" }),
       task({ folder: "docs/tasks/2026-09-05-0900-done-two", column: "done" }),
+      task({
+        folder: "docs/tasks/2026-09-07-0900-stuck-one",
+        column: "blocked",
+        needs_attention: true,
+        key_info: "blocked on X",
+      }),
     ]);
     renderKanban();
 
@@ -151,7 +158,10 @@ describe("Kanban", () => {
     expect(screen.getByText("done-two")).toBeInTheDocument();
 
     const columns = screen.getAllByText(/^\d+$/, { selector: ".kanban-column-count" });
-    expect(columns.map((el) => el.textContent)).toEqual(["1", "0", "0", "1", "1", "2"]);
+    expect(columns.map((el) => el.textContent)).toEqual(["1", "0", "0", "1", "1", "1", "2"]);
+    const stuck = screen.getByTestId("task-card-docs/tasks/2026-09-07-0900-stuck-one");
+    expect(stuck.closest(".kanban-column-cards")?.previousElementSibling).toHaveTextContent("Blocked");
+    expect(stuck.querySelector(".kcard-attn")).not.toBeNull();
   });
 
   it("renders two sibling sub-task cards under the same parent as ordinary cards in different columns, and shows the parent's own N of M done bar", async () => {

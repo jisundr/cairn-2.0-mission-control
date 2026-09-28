@@ -227,6 +227,23 @@ describe("TaskDrawer", () => {
     expect(within(row).queryByText("active")).not.toBeInTheDocument();
   });
 
+  it("shows the Blocked stage chip in the header and on a blocked sub-task row", async () => {
+    renderDrawer(
+      detail({
+        column: "blocked",
+        sub_tasks: [
+          { folder: "docs/tasks/parent/01-first", column: "blocked", active: false, needs_attention: false, goal: "First" },
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByTestId("subtask-row-docs/tasks/parent/01-first")).toBeInTheDocument());
+    const header = document.querySelector(".drawer-badges") as HTMLElement;
+    expect(within(header).getByText("Blocked")).toBeInTheDocument();
+    expect(within(screen.getByTestId("subtask-row-docs/tasks/parent/01-first")).getByText("Blocked")).toBeInTheDocument();
+    expect(screen.queryByTestId("reply-composer")).not.toBeInTheDocument();
+  });
+
   it("shows a parent link in the header when the task has one, re-opening the drawer on click", async () => {
     const onOpenTask = vi.fn();
     const fetchMock = installDetail(detail({ parent: "docs/tasks/2026-09-28-1000-build-kanban-parent" }));
