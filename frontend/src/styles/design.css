@@ -133,6 +133,8 @@ body {
 /* Kanban page only: fills the window, so the column panes (not the page)
    scroll and end a --header-pad gap above the window's bottom edge. */
 .shell.shell-board {
+  /* Wide enough for six 260px columns + gaps (1640px) plus the 28px gutters. */
+  max-width: 1696px;
   height: 100vh; height: 100dvh; display: flex; flex-direction: column;
   padding-bottom: var(--header-pad); overflow: hidden; box-sizing: border-box;
 }

@@ -94,6 +94,19 @@ test.describe("kanban board layout", () => {
     });
   }
 
+  test("1920x1000: all six columns are visible without sideways scroll", async ({ page }) => {
+    await openBoard(page, 1920, 1000);
+    const board = page.locator(".kanban-columns");
+    expect(await board.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const rights = await page
+      .locator(".kanban-column")
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().right));
+    for (const r of rights) expect(r).toBeLessThanOrEqual(1920);
+    // 1280 stays narrower than six 260px columns, so it scrolls sideways there.
+    await page.setViewportSize({ width: 1280, height: 900 });
+    expect(await board.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  });
+
   test("375x800: every column shows skeleton cards until the first tasks response, then none", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     await mockTasks(page, 800);
