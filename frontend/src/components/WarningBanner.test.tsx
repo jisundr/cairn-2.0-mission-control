@@ -13,20 +13,15 @@ const event: UsageLimitEvent = {
 
 describe("WarningBanner", () => {
   it("renders nothing when there are no events", () => {
-    render(<WarningBanner events={[]} onViewSession={() => {}} />);
+    render(<WarningBanner events={[]} />);
     expect(screen.queryByTestId("usage-limit-banner")).not.toBeInTheDocument();
   });
 
-  // Regression test: AlertTriangleIcon here has no wrapping .err-text/
-  // .state-icon class to constrain it (unlike every other caller), so it
-  // must size itself via its own `size` prop - unbounded (no width/height
-  // attribute at all) is the bug this guards against.
-  it("renders its icon at a bounded size, not an unconstrained viewBox fill", () => {
-    render(<WarningBanner events={[event]} onViewSession={() => {}} />);
+  it("reports the event count, singular and plural", () => {
+    const { rerender } = render(<WarningBanner events={[event]} />);
+    expect(screen.getByTestId("usage-limit-banner")).toHaveTextContent("once");
 
-    const svg = screen.getByTestId("usage-limit-banner").querySelector("svg");
-    expect(svg).toBeInTheDocument();
-    expect(svg?.getAttribute("width")).toBe("14");
-    expect(svg?.getAttribute("height")).toBe("14");
+    rerender(<WarningBanner events={[event, { ...event, id: 2 }]} />);
+    expect(screen.getByTestId("usage-limit-banner")).toHaveTextContent("2 times");
   });
 });

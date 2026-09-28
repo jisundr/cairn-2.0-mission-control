@@ -13,6 +13,19 @@
   --remove: #b3372f;
   --remove-bg: #fbebe9;
   --remove-line: #d33f3f;
+  /* Categorical series (dataviz skill's validated 8-hue default, fixed order
+     - identity color for By models/tools/agents/project's stacked-bar rows.
+     Not --add/--remove: those are reserved status colors, never reused for
+     series. Validated against this app's own --panel surfaces (#ffffff
+     light / #1a1a14 dark), not just the skill's reference surface. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   color-scheme: light dark;
@@ -33,6 +46,14 @@
     --remove: #ef7268;
     --remove-bg: #33201d;
     --remove-line: #ef7268;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
   }
 }
 * { box-sizing: border-box; }
@@ -98,7 +119,7 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .seg.active { background: var(--panel); border-color: var(--border); color: var(--ink); font-weight: 600; }
 
 /* ---- install-scope row (F2): hostname + (read-only project chip | "All
-   projects" dropdown -> "Filtering: X" chip), relocated out of the header
+   projects" dropdown -> "Project: X" chip), relocated out of the header
    onto its own row, per the overview-revamp mockups ---- */
 .host-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
 .host-row-left { display: flex; align-items: center; gap: 8px; }
@@ -134,12 +155,12 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 /* ---- grid / panel ---- */
 .grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
 /* Overview revamp (O1): utility column-count variants for the Trend/
-   Calendar+Breakdown row (grid-2) and the By models/tools/agents(/project)
-   row (grid-3) - respect the same 900px single-column collapse `.grid`
-   already does, per the media query below. */
+   Calendar+Breakdown row (grid-2, uneven - chart gets more room than the
+   summary beside it) and the By models/tools/agents(/project) row
+   (grid-1, on request - was 3 equal columns wrapping a 4th panel alone on
+   system installs, then 2, now one full-width panel per row). */
 .grid-2 { grid-template-columns: 1.6fr 1fr; }
-.grid-3 { grid-template-columns: repeat(3, 1fr); }
-.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-1 { grid-template-columns: 1fr; }
 .trend-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .kv-list { display: flex; flex-direction: column; flex-grow: 1; }
 .kv-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; font-family: var(--mono); font-size: 11px; }
@@ -154,8 +175,9 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 }
 .panel-title.err { color: var(--remove); }
 
-/* ---- chart tooltip (shared by every Recharts panel: TokensPerDayChart,
-   ActivityHeatmap, HbarList, ProjectCostPanel) ---- */
+/* ---- chart tooltip (shared by the remaining Recharts panels:
+   TokensPerDayChart, HbarList - ActivityHeatmap is gone, ProjectCostPanel
+   moved off Recharts onto StackedBarPanel in F6) ---- */
 .chart-tooltip {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   padding: 10px 12px; font-size: 11.5px; color: var(--ink); max-width: 220px;
@@ -163,6 +185,11 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .chart-tooltip-title { font-weight: 600; margin-bottom: 6px; color: var(--ink); }
 .chart-tooltip-row { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-soft); }
 .chart-tooltip-row + .chart-tooltip-row { margin-top: 2px; }
+/* TokensPerDayChart's per-model tooltip row (on request) needs its own
+   swatch sizing - `.stack-legend .sw`/`.cal-legend .sw` are both scoped to
+   their own container and don't reach a `.sw` used here, which otherwise
+   renders as an unsized, flex-shrunk-to-nothing span. */
+.chart-tooltip-row .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 
 /* ---- hbar list: row-level styling now lives inline in each Recharts
    `shape`/`tick` renderer (HbarList.tsx, TruncatedAxisTick.tsx,
@@ -184,8 +211,8 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 @keyframes flash { 0% { transform: scale(1.6); } 100% { transform: scale(1); } }
 
 /* ---- Calendar view (F7): GitHub-style contribution heatmap, on the app's
-   existing --add scale (ActivityHeatmap already colors intensity this way)
-   rather than a separate color system - see lib/heatColor.ts. ---- */
+   existing --add scale rather than a separate color system - see
+   lib/heatColor.ts. ---- */
 .cal-body { display: flex; gap: 8px; align-items: flex-start; }
 .cal-daylabels { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 .cal-daylabels div { height: 13px; display: flex; align-items: center; font-family: var(--mono); font-size: 9px; color: var(--ink-faint); }
@@ -194,11 +221,6 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 .cal-week { display: flex; flex-direction: column; gap: 4px; }
 .cal-cell { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; cursor: pointer; }
 .cal-cell.zerofill { background: transparent; cursor: default; }
-.cal-cell.today { position: relative; }
-.cal-cell.today::after {
-  content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px;
-  border-radius: 50%; background: var(--ink); transform: translateX(-50%);
-}
 .cal-cell.selected { outline: 2px solid var(--ink); outline-offset: 1px; }
 .cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 8px; }
 .cal-legend .sw { width: 11px; height: 11px; border-radius: 2px; }
@@ -206,21 +228,31 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 
 /* ---- stacked-bar panels (F5): By models / By tools / By agents / By
    project - a GitHub-language-bar-style proportional segmented bar plus a
-   legend, on the same 3-tier ink/ink-soft/ink-faint monochrome scale the
-   rest of the app already uses for hierarchy. ---- */
-.stackbar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--border-soft); }
-.stackbar .seg { height: 100%; }
+   legend. Rows take the fixed-order categorical --series-N scale (identity
+   color per row/name), not the ink/ink-soft/ink-faint hierarchy scale - that
+   3-tier monochrome was carried straight from the wireframe for layout
+   purposes only, never a real color decision. Bar itself is a Recharts
+   stacked BarChart (one <Bar stackId> per row, see StackedBarPanel.tsx) -
+   the swatch stays a plain CSS square, but each segment is an SVG <rect>,
+   so the shared `.series-N` classes below carry both `background` (swatch)
+   and `fill` (segment). ---- */
+.stackbar { height: 10px; border-radius: 5px; overflow: hidden; background: var(--border-soft); }
 .stack-legend { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
 .stack-legend .item { display: flex; align-items: center; gap: 8px; }
 .stack-legend .item.clickable { cursor: pointer; }
 .stack-legend .item.selected .name { color: var(--add); font-weight: 600; }
-.stackbar .seg.selected { outline: 1px solid var(--add-line); outline-offset: -1px; }
+.stackbar .seg.selected, .chart-bars .seg.selected { outline: 1px solid var(--add-line); outline-offset: -1px; }
 .stack-legend .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 .stack-legend .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--ink); }
 .stack-legend .val { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink); white-space: nowrap; }
-.tier-1 { background: var(--ink); }
-.tier-2 { background: var(--ink-soft); }
-.tier-3 { background: var(--ink-faint); }
+.series-1 { background: var(--series-1); fill: var(--series-1); }
+.series-2 { background: var(--series-2); fill: var(--series-2); }
+.series-3 { background: var(--series-3); fill: var(--series-3); }
+.series-4 { background: var(--series-4); fill: var(--series-4); }
+.series-5 { background: var(--series-5); fill: var(--series-5); }
+.series-6 { background: var(--series-6); fill: var(--series-6); }
+.series-7 { background: var(--series-7); fill: var(--series-7); }
+.series-8 { background: var(--series-8); fill: var(--series-8); }
 
 .btn-block {
   display: block; width: 100%; text-align: center; margin-top: 10px;
@@ -348,7 +380,7 @@ table.sessions a.sess:hover { text-decoration: underline; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 @media (max-width: 900px) {
-  .grid, .grid-2, .grid-3, .grid-4, .drill-grid { grid-template-columns: 1fr; }
+  .grid, .grid-2, .drill-grid { grid-template-columns: 1fr; }
   .shell { padding: 16px 16px 36px; }
   header.app { gap: 12px; }
   .app-right { width: 100%; justify-content: space-between; }

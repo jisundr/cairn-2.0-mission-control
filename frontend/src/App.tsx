@@ -76,7 +76,7 @@ export function App() {
   }
 
   if (activeTab === "overview") {
-    return <Overview activeTab={activeTab} onTabChange={navigateToTab} onSelectSession={navigateToSession} />;
+    return <Overview activeTab={activeTab} onTabChange={navigateToTab} />;
   }
 
   return <SessionsList activeTab={activeTab} onTabChange={navigateToTab} onSelectSession={navigateToSession} />;

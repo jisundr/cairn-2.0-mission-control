@@ -4,7 +4,7 @@ import type { TimeseriesPoint } from "../api/types";
 import { ContributionCalendar } from "./ContributionCalendar";
 
 function point(bucket: string, tokens: number): TimeseriesPoint {
-  return { bucket, calls: 1, tokens, cost: 0.1 };
+  return { bucket, calls: 1, tokens, cost: 0.1, by_model: [] };
 }
 
 describe("ContributionCalendar", () => {
@@ -21,13 +21,10 @@ describe("ContributionCalendar", () => {
     expect(cells[2]).not.toHaveClass("zerofill");
   });
 
-  it("marks the range's last bucket as today, and reports a clicked cell's date", () => {
+  it("reports a clicked cell's date", () => {
     const points = [point("2026-09-09", 100), point("2026-09-10", 200)];
     const onSelectDate = vi.fn();
     render(<ContributionCalendar points={points} selectedDate={null} onSelectDate={onSelectDate} />);
-
-    expect(screen.getByTestId("cal-cell-2026-09-10")).toHaveClass("today");
-    expect(screen.getByTestId("cal-cell-2026-09-09")).not.toHaveClass("today");
 
     fireEvent.click(screen.getByTestId("cal-cell-2026-09-09"));
     expect(onSelectDate).toHaveBeenCalledWith("2026-09-09");

@@ -3,7 +3,7 @@ import sys
 import threading
 import time
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -128,7 +128,7 @@ def test_fetch_calls_includes_subsecond_timestamps_at_the_lower_boundary(tmp_pat
 
 
 # --------------------------------------------------------------------------
-# Rollup correctness: agent, model, tool/skill/mcp, day, heatmap
+# Rollup correctness: agent, model, tool/skill/mcp, day
 # --------------------------------------------------------------------------
 
 
@@ -162,6 +162,23 @@ def test_rollup_timeseries_zero_fills_and_buckets_by_day():
     assert by_bucket["2026-08-27"]["tokens"] == 0
     assert by_bucket["2026-08-27"]["calls"] == 0
     assert by_bucket["2026-08-28"]["tokens"] == 30
+
+
+def test_rollup_timeseries_by_model_groups_and_sorts_per_bucket():
+    rows = [
+        make_call(request_id="r1", timestamp="2026-08-26T10:00:00Z", model="claude-sonnet-5", input_tokens=10, output_tokens=0),
+        make_call(request_id="r2", timestamp="2026-08-26T11:00:00Z", model="claude-haiku-4.5", input_tokens=100, output_tokens=0),
+        make_call(request_id="r3", timestamp="2026-08-26T12:00:00Z", model="claude-haiku-4.5", input_tokens=50, output_tokens=0),
+    ]
+    points = server.rollup_timeseries(rows, "2026-08-26T00:00:00Z", "2026-08-27T00:00:00Z", "day")
+    by_bucket = {p["bucket"]: p for p in points}
+
+    # Descending by tokens, same sort rollup_group always applies - haiku's
+    # combined 150 outranks sonnet's 10 despite sonnet appearing first.
+    assert [g["key"] for g in by_bucket["2026-08-26"]["by_model"]] == ["claude-haiku-4.5", "claude-sonnet-5"]
+    assert by_bucket["2026-08-26"]["by_model"][0]["tokens"] == 150
+    # A zero-call bucket's by_model is an empty list, not a missing key.
+    assert by_bucket["2026-08-27"]["by_model"] == []
 
 
 def test_rollup_tool_group_separates_tool_skill_and_mcp_families():
@@ -231,50 +248,6 @@ def test_day_detail_adds_by_tool_and_by_agent_for_the_same_window(tmp_path):
     by_agent = {g["key"]: g for g in detail["by_agent"]}
     assert by_agent["builder"]["tokens"] == 100
     assert by_agent["reviewer"]["tokens"] == 50
-
-
-def test_heatmap_returns_raw_per_call_timestamp_and_tokens_rows(tmp_path):
-    # Bucketing (day-of-week/hour, in the viewer's local time zone) happens
-    # client-side in ActivityHeatmap.tsx - the server only projects each
-    # ranged call down to {timestamp, tokens}, unaggregated.
-    root = make_project(
-        tmp_path, "proj",
-        calls=[
-            make_call(request_id="r1", timestamp="2026-08-24T09:00:00Z", input_tokens=100, output_tokens=50),
-            make_call(request_id="r2", timestamp="2026-08-25T14:00:00Z", input_tokens=10, output_tokens=5),
-        ],
-    )
-    app = server.TokenMeteringApp(root)
-
-    rows = app.heatmap("life")
-
-    assert {r["timestamp"] for r in rows} == {"2026-08-24T09:00:00Z", "2026-08-25T14:00:00Z"}
-    by_ts = {r["timestamp"]: r["tokens"] for r in rows}
-    assert by_ts["2026-08-24T09:00:00Z"] == 150
-    assert by_ts["2026-08-25T14:00:00Z"] == 15
-    assert all(set(r) == {"timestamp", "tokens"} for r in rows)
-
-
-def test_heatmap_is_bounded_by_range(tmp_path):
-    # Relative to the actual wall clock (not a hardcoded date), matching how
-    # `heatmap()`'s `range_key` -> `range_bounds()` -> `datetime.now()` chain
-    # resolves "7d" in production - a hardcoded old/new pair would drift out
-    # of (or into) range depending on when the suite runs.
-    now = datetime.now(timezone.utc)
-    old_ts = (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    recent_ts = (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    root = make_project(
-        tmp_path, "proj",
-        calls=[
-            make_call(request_id="old", timestamp=old_ts),
-            make_call(request_id="recent", timestamp=recent_ts),
-        ],
-    )
-    app = server.TokenMeteringApp(root)
-
-    rows = app.heatmap("7d")
-
-    assert {r["timestamp"] for r in rows} == {recent_ts}
 
 
 # --------------------------------------------------------------------------
@@ -677,7 +650,6 @@ def test_cold_start_missing_db_returns_empty_results(tmp_path):
     assert app.agent_rollup("7d") == []
     assert app.sessions("7d") == []
     assert app.tool_rollup("7d") == []
-    assert app.heatmap("7d") == []
 
     timeseries = app.timeseries("life")
     assert timeseries["points"] == []

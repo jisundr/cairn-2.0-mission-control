@@ -6,6 +6,11 @@ interface InstallScopeRowProps {
   hostTag: string;
   selectedProject: string | undefined;
   onSelectProject: (project: string | undefined) => void;
+  // Optional - only Overview has a selected-day concept (O2's click-to-
+  // drill-into-a-day); Sessions List mounts this row without either prop,
+  // so the chip simply never renders there.
+  selectedDate?: string | null;
+  onClearDate?: () => void;
 }
 
 // `.host-row` per the overview-revamp mockups - the app's hostname,
@@ -14,12 +19,21 @@ interface InstallScopeRowProps {
 // single-project install (`projects.length <= 1`) shows a read-only
 // project-name chip (nothing to filter, already scoped to one project); a
 // multi-project ("system") install shows an "All projects" dropdown that
-// becomes a "Filtering: X ✕" chip once a project is picked - reusing
+// becomes a "Project: X ✕" chip once a project is picked - reusing
 // ProjectCostPanel's own `.filter-chip`/`.clear` markup and click-to-clear
 // interaction rather than a second implementation of it. Mounted on both
 // Overview (wired to its own `projectFilter` state) and Sessions List
 // (wired to its existing `projectFilter`/`setProjectFilter`, no new state).
-export function InstallScopeRow({ projects, hostTag, selectedProject, onSelectProject }: InstallScopeRowProps) {
+// Overview also gets a second, independent "Date: X ✕" chip once O2's
+// click-to-drill selects a day - same chip markup, own clear handler.
+export function InstallScopeRow({
+  projects,
+  hostTag,
+  selectedProject,
+  onSelectProject,
+  selectedDate,
+  onClearDate,
+}: InstallScopeRowProps) {
   const [open, setOpen] = useState(false);
   const multiProject = projects.length > 1;
 
@@ -32,7 +46,7 @@ export function InstallScopeRow({ projects, hostTag, selectedProject, onSelectPr
           </span>
         ) : selectedProject ? (
           <span className="filter-chip" data-testid="install-scope-chip">
-            Filtering: {selectedProject}
+            Project: {selectedProject}
             <span className="clear" title="Clear filter" onClick={() => onSelectProject(undefined)}>
               <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -71,6 +85,17 @@ export function InstallScopeRow({ projects, hostTag, selectedProject, onSelectPr
               </div>
             )}
           </div>
+        )}
+        {selectedDate && onClearDate && (
+          <span className="filter-chip" data-testid="install-scope-date-chip">
+            Date: {selectedDate}
+            <span className="clear" title="Clear selected day" onClick={onClearDate}>
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
+                <line x1="6" y1="6" x2="18" y2="18" />
+                <line x1="6" y1="18" x2="18" y2="6" />
+              </svg>
+            </span>
+          </span>
         )}
       </div>
       <div className="host-row-right">

@@ -28,7 +28,7 @@ describe("InstallScopeRow", () => {
     expect(onSelectProject).toHaveBeenCalledWith("wardstone");
   });
 
-  it("shows a clearable 'Filtering: X' chip once a project is selected on a multi-project install", () => {
+  it("shows a clearable 'Project: X' chip once a project is selected on a multi-project install", () => {
     const projects: ProjectSummary[] = [
       { label: "cairn-2.0", parent: null },
       { label: "wardstone", parent: null },
@@ -37,9 +37,34 @@ describe("InstallScopeRow", () => {
     render(<InstallScopeRow projects={projects} hostTag="host.local" selectedProject="wardstone" onSelectProject={onSelectProject} />);
 
     const chip = screen.getByTestId("install-scope-chip");
-    expect(chip).toHaveTextContent("Filtering: wardstone");
+    expect(chip).toHaveTextContent("Project: wardstone");
 
     fireEvent.click(chip.querySelector(".clear")!);
     expect(onSelectProject).toHaveBeenCalledWith(undefined);
+  });
+
+  it("shows nothing for the selected day by default, and a clearable date chip once one is selected", () => {
+    const projects: ProjectSummary[] = [{ label: "cairn-2.0", parent: null }];
+    const onClearDate = vi.fn();
+    const { rerender } = render(
+      <InstallScopeRow projects={projects} hostTag="host.local" selectedProject={undefined} onSelectProject={vi.fn()} />,
+    );
+    expect(screen.queryByTestId("install-scope-date-chip")).not.toBeInTheDocument();
+
+    rerender(
+      <InstallScopeRow
+        projects={projects}
+        hostTag="host.local"
+        selectedProject={undefined}
+        onSelectProject={vi.fn()}
+        selectedDate="2026-09-25"
+        onClearDate={onClearDate}
+      />,
+    );
+
+    const chip = screen.getByTestId("install-scope-date-chip");
+    expect(chip).toHaveTextContent("Date: 2026-09-25");
+    fireEvent.click(chip.querySelector(".clear")!);
+    expect(onClearDate).toHaveBeenCalled();
   });
 });

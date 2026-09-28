@@ -9,7 +9,7 @@ import {
   useToolRollup,
   useUsageLimitEvents,
 } from "../api/hooks";
-import type { CountRollupRow, GroupRollupRow, ProjectSummary, RangeKey, SessionSummary } from "../api/types";
+import type { CountRollupRow, GroupRollupRow, ProjectSummary, RangeKey, SessionSummary, UsageLimitEvent } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
 import { ContributionCalendar } from "../components/ContributionCalendar";
 import { isUnknownCost } from "../components/InfoDot";
@@ -46,6 +46,15 @@ function sessionOverlapsDate(session: SessionSummary, date: string): boolean {
   return session.started <= dayEnd && session.ended >= dayStart;
 }
 
+// A usage-limit event is a point in time, not a [started, ended) window -
+// same UTC-day-boundary comparison as sessionOverlapsDate above, just
+// against a single timestamp instead of a range.
+function eventOnDate(event: UsageLimitEvent, date: string): boolean {
+  const dayStart = `${date}T00:00:00Z`;
+  const dayEnd = `${date}T23:59:59.999Z`;
+  return event.timestamp >= dayStart && event.timestamp <= dayEnd;
+}
+
 // O3: By models/By agents rows carry exact cost+tokens (both group rollups
 // sum priced `calls` rows); By tools carries a call-count share only - see
 // PLAN.md's Summary and B2's day_detail() docstring for why per-tool cost
@@ -63,13 +72,20 @@ function callCountRows(rows: CountRollupRow[]): StackedBarRow[] {
   return rows.map((r) => ({ key: r.key, value: r.count, display: `${r.count} call${r.count === 1 ? "" : "s"}` }));
 }
 
+// Breakdown's per-row loading placeholder - the row's own name ("Cost" etc.)
+// is always known immediately, only the value is pending, so this replaces
+// just the "…" that used to sit where a real value renders (StackedBarPanel
+// has its own three-piece skeleton for rows whose *name* is unknown too).
+function ValueSkel({ width = 50 }: { width?: number }) {
+  return <span className="skel" style={{ display: "inline-block", width, height: 11, verticalAlign: "middle" }} />;
+}
+
 interface OverviewProps {
   activeTab: AppTab;
   onTabChange: (tab: AppTab) => void;
-  onSelectSession: (sessionId: string) => void;
 }
 
-export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewProps) {
+export function Overview({ activeTab, onTabChange }: OverviewProps) {
   const [view, setView] = useState<OverviewView>("trend");
   const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
 
@@ -130,7 +146,6 @@ export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewPr
     <OverviewLoaded
       activeTab={activeTab}
       onTabChange={onTabChange}
-      onSelectSession={onSelectSession}
       hostTag={hostTag}
       projects={projects.data?.projects ?? []}
       view={view}
@@ -144,7 +159,6 @@ export function Overview({ activeTab, onTabChange, onSelectSession }: OverviewPr
 interface OverviewLoadedProps {
   activeTab: AppTab;
   onTabChange: (tab: AppTab) => void;
-  onSelectSession: (sessionId: string) => void;
   hostTag: string;
   projects: ProjectSummary[];
   view: OverviewView;
@@ -156,7 +170,6 @@ interface OverviewLoadedProps {
 function OverviewLoaded({
   activeTab,
   onTabChange,
-  onSelectSession,
   hostTag,
   projects,
   view,
@@ -171,7 +184,11 @@ function OverviewLoaded({
   const toolRollup = useToolRollup({ range, project: projectFilter });
   const agentRollup = useAgentRollup({ range, project: projectFilter });
   const modelRollup = useModelRollup({ range, project: projectFilter });
-  const usageLimitEvents = useUsageLimitEvents({ range: "7d", project: projectFilter });
+  // On request: was a fixed "7d" fetch regardless of the active view, so a
+  // selected date outside that window would silently filter to zero events
+  // rather than showing what actually happened that day. Now scoped to the
+  // same `range` every other rollup on this page uses.
+  const usageLimitEvents = useUsageLimitEvents({ range, project: projectFilter });
 
   // O2: click-to-drill-into-a-day. Reset whenever the view or project
   // filter changes - a selected date from a 30-day Trend window has no
@@ -202,29 +219,43 @@ function OverviewLoaded({
   const sessionCount = selectedDate
     ? sessionsFiltered.data?.filter((s) => sessionOverlapsDate(s, selectedDate)).length ?? null
     : sessionsFiltered.data?.length ?? null;
-  const breakdownLabel = selectedDate ? `${selectedDate} · ${VIEW_LABEL[view]}` : VIEW_LABEL[view];
+  // Selected day, else the active view's fixed window - Breakdown and every
+  // By-panel below share this same label (was two separately-computed but
+  // identical expressions; collapsed to one).
+  const panelLabel = selectedDate ? selectedDate : VIEW_LABEL[view];
 
   // O3: By models/tools/agents - aggregate (the active range's own rollup)
   // vs. day-selected (B2's day_detail() breakdown), same source split
   // Breakdown above uses.
   const byModelsRows = costTokenRows(selectedDate ? dayDetail.data?.by_model ?? [] : modelRollup.data ?? []);
   const byModelsError = selectedDate ? dayDetail.isError : modelRollup.isError;
+  const byModelsLoading = selectedDate ? !dayDetail.data : !modelRollup.data;
   const byToolsRows = callCountRows(selectedDate ? dayDetail.data?.by_tool ?? [] : toolRollup.data ?? []);
   const byToolsError = selectedDate ? dayDetail.isError : toolRollup.isError;
+  const byToolsLoading = selectedDate ? !dayDetail.data : !toolRollup.data;
   const byAgentsRows = costTokenRows(selectedDate ? dayDetail.data?.by_agent ?? [] : agentRollup.data ?? []);
   const byAgentsError = selectedDate ? dayDetail.isError : agentRollup.isError;
-  const byPanelsLabel = selectedDate ? selectedDate : VIEW_LABEL[view];
+  const byAgentsLoading = selectedDate ? !dayDetail.data : !agentRollup.data;
 
   // O4: By project - only on a multi-project ("system") install, same
-  // `projects.length > 1` signal SessionsList.tsx already uses. Reuses
-  // sessionsAllProjects (Overview's own existing unfiltered fetch) rather
-  // than a new call; day-selected filters that same array for date
-  // overlap before handing it to ProjectCostPanel (F6) - its own
-  // projectTotals()/buildRootLabels() math is unchanged either way.
-  const multiProject = projects.length > 1;
+  // `projects.length > 1` signal SessionsList.tsx already uses, and only
+  // while unfiltered - once InstallScopeRow's "Project: X" chip narrows
+  // the whole page to one project, a per-project breakdown has nothing
+  // left to break down (on request). Reuses sessionsAllProjects (Overview's
+  // own existing unfiltered fetch) rather than a new call; day-selected
+  // filters that same array for date overlap before handing it to
+  // ProjectCostPanel (F6) - its own projectTotals()/buildRootLabels() math
+  // is unchanged either way.
+  const multiProject = projects.length > 1 && !projectFilter;
   const byProjectSessions = selectedDate
     ? (sessionsAllProjects.data ?? []).filter((s) => sessionOverlapsDate(s, selectedDate))
     : sessionsAllProjects.data ?? [];
+
+  // On request: the Breakdown row's count now tracks the selected day
+  // rather than always showing the whole range's total.
+  const breakdownUsageLimitEvents = selectedDate
+    ? (usageLimitEvents.data ?? []).filter((e) => eventOnDate(e, selectedDate))
+    : usageLimitEvents.data ?? [];
 
   return (
     <div className="shell">
@@ -235,8 +266,6 @@ function OverviewLoaded({
         onRefresh={handleRefresh}
         updatedLabel={lastUpdated ? `updated ${formatRelativeToNow(lastUpdated.toISOString())}` : null}
       />
-
-      <WarningBanner events={usageLimitEvents.data ?? []} onViewSession={onSelectSession} />
 
       <div className="range-row" data-testid="view-toggle">
         <div className="segs">
@@ -254,13 +283,15 @@ function OverviewLoaded({
         hostTag={hostTag}
         selectedProject={projectFilter}
         onSelectProject={onProjectFilterChange}
+        selectedDate={selectedDate}
+        onClearDate={() => setSelectedDate(null)}
       />
 
       <div className="grid grid-2" style={{ marginBottom: 16 }}>
         <Panel err={timeseries.isError} style={{ display: "flex", flexDirection: "column" }}>
           <div className="trend-panel-head">
             <PanelTitle err={timeseries.isError} style={{ margin: 0 }}>
-              {view === "trend" ? "Token trends" : "Daily activity"}
+              {view === "trend" ? "Trends" : "Daily activity"}
             </PanelTitle>
             <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
               {VIEW_LABEL[view]}
@@ -272,12 +303,7 @@ function OverviewLoaded({
             </div>
           ) : timeseries.data ? (
             view === "trend" ? (
-              <TokensPerDayChart
-                timeseries={timeseries.data}
-                project={projectFilter}
-                selectedDate={selectedDate}
-                onSelectDate={setSelectedDate}
-              />
+              <TokensPerDayChart timeseries={timeseries.data} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
             ) : (
               <ContributionCalendar points={timeseries.data.points} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
             )
@@ -290,30 +316,32 @@ function OverviewLoaded({
           <div className="trend-panel-head">
             <PanelTitle style={{ margin: 0 }}>Breakdown</PanelTitle>
             <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
-              {breakdownLabel}
+              {panelLabel}
             </span>
           </div>
           <div className="kv-list" data-testid="breakdown">
             <div className="kv-row" data-testid="breakdown-cost">
               <span className="name">Cost</span>
-              <span className="val">{totalsLoaded ? formatCost(totalCost) : "…"}</span>
+              <span className="val">{totalsLoaded ? formatCost(totalCost) : <ValueSkel />}</span>
             </div>
             <div className="kv-row" data-testid="breakdown-tokens">
               <span className="name">Tokens</span>
-              <span className="val">{totalsLoaded && totalTokens !== null ? formatTokens(totalTokens) : "…"}</span>
+              <span className="val">{totalsLoaded && totalTokens !== null ? formatTokens(totalTokens) : <ValueSkel />}</span>
             </div>
             <div className="kv-row" data-testid="breakdown-sessions">
               <span className="name">Sessions</span>
-              <span className="val">{sessionCount !== null ? sessionCount : "…"}</span>
+              <span className="val">{sessionCount !== null ? sessionCount : <ValueSkel width={24} />}</span>
             </div>
+            <WarningBanner events={breakdownUsageLimitEvents} />
           </div>
         </Panel>
       </div>
 
-      <div className="grid grid-3">
+      <div className="grid grid-1">
         {multiProject && (
           <ProjectCostPanel
             sessions={byProjectSessions}
+            loading={!sessionsAllProjects.data}
             projects={projects}
             selectedProject={projectFilter}
             onSelectProject={onProjectFilterChange}
@@ -326,7 +354,7 @@ function OverviewLoaded({
               By models
             </PanelTitle>
             <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
-              {byPanelsLabel}
+              {panelLabel}
             </span>
           </div>
           {byModelsError ? (
@@ -334,25 +362,7 @@ function OverviewLoaded({
               <PanelError message="Couldn't load — request failed" onRetry={() => (selectedDate ? dayDetail.refetch() : modelRollup.refetch())} testId="by-models-error" />
             </div>
           ) : (
-            <StackedBarPanel data-testid="by-models" rows={byModelsRows} emptyText="No model usage yet." />
-          )}
-        </Panel>
-
-        <Panel err={byToolsError}>
-          <div className="trend-panel-head">
-            <PanelTitle err={byToolsError} style={{ margin: 0 }}>
-              By tools
-            </PanelTitle>
-            <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
-              {byPanelsLabel}
-            </span>
-          </div>
-          {byToolsError ? (
-            <div className="err-inline">
-              <PanelError message="Couldn't load — request failed" onRetry={() => (selectedDate ? dayDetail.refetch() : toolRollup.refetch())} testId="by-tools-error" />
-            </div>
-          ) : (
-            <StackedBarPanel data-testid="by-tools" rows={byToolsRows} emptyText="No tool calls yet." />
+            <StackedBarPanel data-testid="by-models" rows={byModelsRows} loading={byModelsLoading} emptyText="No model usage yet." />
           )}
         </Panel>
 
@@ -362,7 +372,7 @@ function OverviewLoaded({
               By agents
             </PanelTitle>
             <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
-              {byPanelsLabel}
+              {panelLabel}
             </span>
           </div>
           {byAgentsError ? (
@@ -370,7 +380,26 @@ function OverviewLoaded({
               <PanelError message="Couldn't load — request failed" onRetry={() => (selectedDate ? dayDetail.refetch() : agentRollup.refetch())} testId="by-agents-error" />
             </div>
           ) : (
-            <StackedBarPanel data-testid="by-agents" rows={byAgentsRows} emptyText="No agent activity yet." />
+            <StackedBarPanel data-testid="by-agents" rows={byAgentsRows} loading={byAgentsLoading} emptyText="No agent activity yet." />
+          )}
+        </Panel>
+
+        {/* On request: By tools last - was between By models and By agents. */}
+        <Panel err={byToolsError}>
+          <div className="trend-panel-head">
+            <PanelTitle err={byToolsError} style={{ margin: 0 }}>
+              By tools
+            </PanelTitle>
+            <span className="host-name" style={{ fontWeight: 500, color: "var(--ink-faint)" }}>
+              {panelLabel}
+            </span>
+          </div>
+          {byToolsError ? (
+            <div className="err-inline">
+              <PanelError message="Couldn't load — request failed" onRetry={() => (selectedDate ? dayDetail.refetch() : toolRollup.refetch())} testId="by-tools-error" />
+            </div>
+          ) : (
+            <StackedBarPanel data-testid="by-tools" rows={byToolsRows} loading={byToolsLoading} emptyText="No tool calls yet." />
           )}
         </Panel>
       </div>

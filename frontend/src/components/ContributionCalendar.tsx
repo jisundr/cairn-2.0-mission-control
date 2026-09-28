@@ -46,20 +46,17 @@ function buildWeeks(points: TimeseriesPoint[]): Cell[][] {
 
 // `.cal-*` per the overview-revamp mockups' Calendar view - a GitHub-style
 // contribution heatmap (weeks as columns, Monday-aligned rows) replacing
-// Trend's day-by-day bar chart. Colors reuse ActivityHeatmap's own
-// continuous `--add` intensity scale (F1's lib/heatColor.ts) rather than a
-// second, discrete color system. "Today" is the range's own last bucket
-// (this component's caller already anchors `points` at now, same
-// convention TokensPerDayChart's own `i === points.length - 1` uses) -
-// not a wall-clock read, so this stays deterministic and testable.
-// Clicking a cell reports its date via `onSelectDate`, toggling off on a
-// repeat click of the already-selected cell; zero-filled cells aren't
-// clickable at all (there's no date behind them).
+// Trend's day-by-day bar chart. Colors use a continuous `--add` intensity
+// scale (F1's lib/heatColor.ts, this component's only consumer now that
+// the hour-of-day ActivityHeatmap it was shared with is gone) rather than a
+// second, discrete color system. No "today" indicator (dropped on
+// request). Clicking a cell reports its date via `onSelectDate`, toggling
+// off on a repeat click of the already-selected cell; zero-filled cells
+// aren't clickable at all (there's no date behind them).
 export function ContributionCalendar({ points, selectedDate, onSelectDate }: ContributionCalendarProps) {
   const colors = useHeatColors();
   const weeks = useMemo(() => buildWeeks(points), [points]);
   const max = Math.max(...points.map((p) => p.tokens), 0);
-  const todayDate = points.length > 0 ? points[points.length - 1].bucket : null;
 
   return (
     <div data-testid="contribution-calendar">
@@ -78,12 +75,11 @@ export function ContributionCalendar({ points, selectedDate, onSelectDate }: Con
                     return <div className="cal-cell zerofill" key={di} />;
                   }
                   const opacity = max === 0 || cell.tokens === 0 ? 0 : Math.max(0.15, cell.tokens / max);
-                  const isToday = cell.date === todayDate;
                   const isSelected = cell.date === selectedDate;
                   return (
                     <div
                       key={di}
-                      className={`cal-cell${isToday ? " today" : ""}${isSelected ? " selected" : ""}`}
+                      className={`cal-cell${isSelected ? " selected" : ""}`}
                       style={{ background: mixHex(colors.border, colors.add, opacity) }}
                       title={`${cell.date} — ${formatTokens(cell.tokens)} tokens`}
                       data-testid={`cal-cell-${cell.date}`}

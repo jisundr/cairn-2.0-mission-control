@@ -18,7 +18,7 @@ function trackErrors(page: Page) {
 }
 
 test.describe("populated loaded states", () => {
-  test("Overview renders seeded rollups and the usage-limit banner, no console errors", async ({ page }) => {
+  test("Overview renders seeded rollups and the usage-limit row, no console errors", async ({ page }) => {
     const { consoleErrors, pageErrors } = trackErrors(page);
 
     await page.goto("/");
@@ -32,8 +32,11 @@ test.describe("populated loaded states", () => {
     await expect(page.getByTestId("by-agents")).toContainText("builder");
     // O4: this fixture seeds a single project - no By-project panel.
     await expect(page.getByTestId("project-cost-panel")).toHaveCount(0);
+    // Now a plain Breakdown row (moved from a standalone banner, link
+    // dropped, both on request) - see warning-banner.spec.ts for its
+    // selected-day behavior.
     await expect(page.getByTestId("usage-limit-banner")).toBeVisible();
-    await expect(page.getByTestId("usage-limit-banner")).toContainText("e2e-session-main");
+    await expect(page.getByTestId("usage-limit-banner")).toContainText("Usage limit");
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);

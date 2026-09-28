@@ -8,8 +8,7 @@ design).
 
 Binds localhost only, runs in the foreground, stops on Ctrl-C. Serves a
 JSON API over `db.py`'s tables (rollups by day/session/agent/tool/skill/
-MCP-server, a per-call feed the client buckets into its own activity
-heatmap, per-session call traces, an on-demand prompt/response lookup)
+MCP-server, per-session call traces, an on-demand prompt/response lookup)
 plus, once a compiled `static/` frontend exists, that frontend with a
 catch-all -> `index.html` fallback for its client-side `/call/<session>/<n>`
 route. Prices are applied at read time via `pricing.py`; this module never
@@ -370,7 +369,10 @@ def _mcp_key(row: dict):
 def rollup_timeseries(rows: list[dict], since: str, until: str, bucket: str) -> list[dict]:
     """One point per bucket between `since` (inclusive) and `until`
     (inclusive of its own bucket), zero-filled for buckets with no calls -
-    a continuous chart, never gappy.
+    a continuous chart, never gappy. `by_model` (on request, for the Trends
+    stacked bar chart) reuses `rollup_group` per bucket - same shape/sort
+    (descending tokens) `day_detail()`'s own `by_model` already returns, an
+    empty list rather than an error for a zero-call bucket.
     """
     grouped = defaultdict(list)
     for row in rows:
@@ -385,6 +387,7 @@ def rollup_timeseries(rows: list[dict], since: str, until: str, bucket: str) -> 
                 "calls": len(group_rows),
                 "tokens": sum(_total_tokens(r) for r in group_rows),
                 "cost": pricing.group_cost(group_rows),
+                "by_model": rollup_group(group_rows, key_fn=lambda r: r["model"]),
             }
         )
     return points
@@ -871,17 +874,6 @@ class TokenMeteringApp:
     def mcp_rollup(self, range_key: str, project_filter: str | None = None) -> list[dict]:
         return rollup_tool_group(self._ranged_tool_uses(range_key, project_filter), key_fn=_mcp_key)
 
-    def heatmap(self, range_key: str, project_filter: str | None = None) -> list[dict]:
-        """Raw per-call `{timestamp, tokens}` rows for the range, unaggregated
-        - the client buckets these into day-of-week/hour cells itself, in its
-        own local time zone (`ActivityHeatmap.tsx`), which a server-side UTC
-        bucketing can't be re-localized into after the fact.
-        """
-        return [
-            {"timestamp": row["timestamp"], "tokens": _total_tokens(row)}
-            for row in self._ranged_calls(range_key, project_filter)
-        ]
-
     def usage_limit_events(self, range_key: str, project_filter: str | None = None) -> list[dict]:
         projects = _filter_projects(self.projects(), project_filter)
         since, until = range_bounds(range_key)
@@ -989,8 +981,6 @@ class TokenMeteringApp:
                 return 200, self._envelope(self.skill_rollup(range_key, project_filter=project_filter))
             if path == "/api/rollup/mcp-server":
                 return 200, self._envelope(self.mcp_rollup(range_key, project_filter=project_filter))
-            if path == "/api/heatmap":
-                return 200, self._envelope(self.heatmap(range_key, project_filter=project_filter))
             if path == "/api/usage-limit-events":
                 return 200, self._envelope(self.usage_limit_events(range_key, project_filter=project_filter))
         except ValueError as exc:

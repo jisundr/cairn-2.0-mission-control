@@ -9,7 +9,6 @@ import type {
   DayDetail,
   Envelope,
   GroupRollupRow,
-  HeatmapRow,
   ProjectsResponse,
   RangeKey,
   SessionSummary,
@@ -62,8 +61,6 @@ export const api = {
   skillRollup: ({ range, project }: RangeParams) => apiGet<CountRollupRow[]>("/rollup/skill", { range, project }),
 
   mcpRollup: ({ range, project }: RangeParams) => apiGet<CountRollupRow[]>("/rollup/mcp-server", { range, project }),
-
-  heatmap: ({ range, project }: RangeParams) => apiGet<HeatmapRow[]>("/heatmap", { range, project }),
 
   usageLimitEvents: ({ range, project }: RangeParams) =>
     apiGet<UsageLimitEvent[]>("/usage-limit-events", { range, project }),

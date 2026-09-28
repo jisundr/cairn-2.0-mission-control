@@ -74,6 +74,7 @@ function projectTotals(sessions: SessionSummary[], rootLabels: Map<string, strin
 
 interface ProjectCostPanelProps {
   sessions: SessionSummary[];
+  loading?: boolean;
   projects: ProjectSummary[];
   selectedProject: string | undefined;
   onSelectProject: (project: string | undefined) => void;
@@ -95,17 +96,17 @@ function toStackedBarRows(totals: ProjectTotal[]): StackedBarRow[] {
 // visual every other By-panel now uses). Toggle-off-on-repeat-click still
 // lives here, not in StackedBarPanel: clicking the already-selected
 // project's legend row clears the filter.
-export function ProjectCostPanel({ sessions, projects, selectedProject, onSelectProject }: ProjectCostPanelProps) {
+export function ProjectCostPanel({ sessions, loading = false, projects, selectedProject, onSelectProject }: ProjectCostPanelProps) {
   const totals = projectTotals(sessions, buildRootLabels(projects));
 
   return (
     <Panel data-testid="project-cost-panel">
       <PanelTitle>
-        Per-project cost
+        By project
         <InfoDot title="Click a project to filter every panel to it - cost is per-project, not a share of the total" />
         {selectedProject && (
           <span className="filter-chip">
-            Filtering: {selectedProject}
+            Project: {selectedProject}
             <span className="clear" title="Clear filter" onClick={() => onSelectProject(undefined)}>
               <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -117,6 +118,7 @@ export function ProjectCostPanel({ sessions, projects, selectedProject, onSelect
       </PanelTitle>
       <StackedBarPanel
         rows={toStackedBarRows(totals)}
+        loading={loading}
         emptyText="No sessions yet."
         selectedKey={selectedProject}
         onSelectRow={(label) => onSelectProject(label === selectedProject ? undefined : label)}

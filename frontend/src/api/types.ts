@@ -26,6 +26,9 @@ export interface TimeseriesPoint {
   calls: number;
   tokens: number;
   cost: number | null;
+  // On request, for the Trends stacked bar chart - same shape/sort
+  // (descending tokens) DayDetail's own by_model already uses.
+  by_model: ModelCostRow[];
 }
 
 export interface Timeseries {
@@ -67,15 +70,6 @@ export interface DayDetail {
   // a tool invocation belongs to (see PLAN.md's By-tools note).
   by_tool: CountRollupRow[];
   by_agent: GroupRollupRow[];
-}
-
-// Raw per-call row for the activity heatmap's range (the last 7 days) -
-// ActivityHeatmap.tsx buckets these into day-of-week/hour cells itself,
-// using each row's local `Date` fields rather than a server-computed UTC
-// bucket, so a DST transition inside the range still lands correctly.
-export interface HeatmapRow {
-  timestamp: string;
-  tokens: number;
 }
 
 export interface SessionSummary {

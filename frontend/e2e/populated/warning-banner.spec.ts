@@ -1,26 +1,25 @@
 import { expect, test } from "@playwright/test";
 
-// Regression coverage for the bug that motivated adding real-browser e2e
-// at all: WarningBanner's AlertTriangleIcon rendered unconstrained
-// (~800px, filling most of the viewport) instead of a small glyph, because
-// no mockup depicts a usage-limit event and jsdom's unit tests don't do
-// real CSS layout - only a real browser renders the icon at its actual
-// laid-out size. fixtures/seed.py seeds e2e-session-main with exactly one
-// usage-limit event so this banner renders against the populated fixture.
+// WarningBanner moved from a standalone top-of-page alert box (with an
+// AlertTriangleIcon that once rendered unconstrained at ~800px - the bug
+// that motivated adding real-browser e2e at all) into a plain `.kv-row`
+// inside Breakdown, on request. No icon and no "View session" link anymore
+// - the row is just a name:value fact like Cost/Tokens/Sessions above it,
+// so the icon-sizing regression class this spec used to guard no longer
+// applies. fixtures/seed.py seeds e2e-session-main with a usage-limit event.
+//
+// This stays a render-level smoke test - selectedDate-scoping itself
+// (Overview.test.tsx's "O2: the usage-limit row scopes to the selected
+// day's own events") is covered deterministically in Vitest instead of
+// here: repeated local e2e/seed runs accumulate events in the same fixture
+// db, so there's no stable count to assert on. Clicking a day at all -
+// including a zero-token one - is covered in a real browser instead, in
+// chart-click.spec.ts.
 
-test("usage-limit banner's warning icon renders at a bounded size, not unconstrained", async ({ page }) => {
+test("usage-limit row renders inside Breakdown", async ({ page }) => {
   await page.goto("/");
 
-  const banner = page.getByTestId("usage-limit-banner");
-  await expect(banner).toBeVisible();
-
-  const icon = banner.locator("svg");
-  await expect(icon).toBeVisible();
-  const box = await icon.boundingBox();
-  expect(box).not.toBeNull();
-  // WarningBanner passes size={14} explicitly; a generous ceiling (well
-  // under the ~800px the unconstrained bug produced) so this stays a
-  // regression test for "unconstrained," not a pixel-exact size assertion.
-  expect(box!.width).toBeLessThanOrEqual(24);
-  expect(box!.height).toBeLessThanOrEqual(24);
+  const row = page.getByTestId("usage-limit-banner");
+  await expect(row).toBeVisible();
+  await expect(page.getByTestId("breakdown")).toContainText("Usage limit");
 });

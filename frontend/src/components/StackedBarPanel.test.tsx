@@ -14,8 +14,13 @@ describe("StackedBarPanel", () => {
       />,
     );
 
-    expect(screen.getByTestId("by-model-seg-sonnet-5")).toHaveStyle({ width: "70%" });
-    expect(screen.getByTestId("by-model-seg-opus-5.5")).toHaveStyle({ width: "30%" });
+    // Rendered as Recharts <rect> segments (pixel `width` attributes off the
+    // 800px stubbed container, not a CSS percentage) - assert the 70/30
+    // proportion rather than an exact pixel figure.
+    const seg1Width = Number(screen.getByTestId("by-model-seg-sonnet-5").getAttribute("width"));
+    const seg2Width = Number(screen.getByTestId("by-model-seg-opus-5.5").getAttribute("width"));
+    expect(seg1Width).toBeGreaterThan(seg2Width);
+    expect(seg1Width / (seg1Width + seg2Width)).toBeCloseTo(0.7, 1);
     expect(screen.getByTestId("by-model-legend-sonnet-5")).toHaveTextContent("sonnet-5");
     expect(screen.getByTestId("by-model-legend-sonnet-5")).toHaveTextContent("$131.00");
   });
@@ -23,6 +28,15 @@ describe("StackedBarPanel", () => {
   it("shows the empty text instead of a zero-width bar when there's no data", () => {
     render(<StackedBarPanel rows={[]} emptyText="No tool calls yet." />);
     expect(screen.getByText("No tool calls yet.")).toBeInTheDocument();
+  });
+
+  // `rows` is `[]` both while a rollup query is still in flight and once it
+  // resolves to genuinely empty - `loading` disambiguates them so a fetch in
+  // progress doesn't flash the empty-text message.
+  it("shows a skeleton instead of the empty text while loading", () => {
+    render(<StackedBarPanel data-testid="by-tools" rows={[]} loading emptyText="No tool calls yet." />);
+    expect(screen.queryByText("No tool calls yet.")).not.toBeInTheDocument();
+    expect(screen.getByTestId("by-tools-loading")).toBeInTheDocument();
   });
 
   // F6: ProjectCostPanel is this component's first click-to-filter

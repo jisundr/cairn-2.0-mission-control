@@ -84,13 +84,6 @@ export function useMcpRollup(params: RangeParams) {
   });
 }
 
-export function useHeatmap(params: RangeParams) {
-  return useQuery({
-    queryKey: rangeKey("heatmap", params),
-    queryFn: () => api.heatmap(params),
-    refetchInterval: POLL_INTERVAL_MS,
-  });
-}
 
 export function useUsageLimitEvents(params: RangeParams) {
   return useQuery({

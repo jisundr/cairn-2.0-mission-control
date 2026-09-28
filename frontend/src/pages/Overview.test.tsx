@@ -19,13 +19,15 @@ const SESSION: SessionSummary = {
   usage_limit_hit: false,
 };
 
+const POINT_BY_MODEL = [{ key: "sonnet-5", calls: 12, tokens: 184204, cost: 12.4 }];
+
 function trendSeries(total_cost: number | null = 41.1): Timeseries {
   return {
     range: "30d",
     bucket: "day",
     since: "",
     until: "",
-    points: [{ bucket: "2026-09-25", calls: 12, tokens: 184204, cost: 12.4 }],
+    points: [{ bucket: "2026-09-25", calls: 12, tokens: 184204, cost: 12.4, by_model: POINT_BY_MODEL }],
     total_tokens: 184204,
     total_cost,
   };
@@ -37,7 +39,7 @@ function calendarSeries(): Timeseries {
     bucket: "day",
     since: "",
     until: "",
-    points: [{ bucket: "2026-09-25", calls: 12, tokens: 184204, cost: 12.4 }],
+    points: [{ bucket: "2026-09-25", calls: 12, tokens: 184204, cost: 12.4, by_model: POINT_BY_MODEL }],
     total_tokens: 184204,
     total_cost: 41.1,
   };
@@ -78,7 +80,7 @@ function baseHandlers(overrides: Record<string, ReturnType<typeof envelope> | { 
 describe("Overview", () => {
   it("shows the disconnected state and a retry when /api/projects fails", async () => {
     installFetchMock(baseHandlers({ "/api/projects": serverError() }));
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     expect(await screen.findByTestId("overview-disconnected")).toBeInTheDocument();
     expect(screen.getByTitle("Can't reach the local server")).toBeInTheDocument();
@@ -86,14 +88,14 @@ describe("Overview", () => {
 
   it("shows the empty state when backfill found no history anywhere", async () => {
     installFetchMock(baseHandlers({ "/api/rollup/session:life": envelope([]) }));
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     expect(await screen.findByTestId("overview-empty")).toBeInTheDocument();
   });
 
   it("O1: renders the Trend chart and a Cost/Tokens/Sessions breakdown once every rollup resolves", async () => {
     installFetchMock(baseHandlers());
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("chart-bars")).toBeInTheDocument());
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
@@ -103,16 +105,40 @@ describe("Overview", () => {
     expect(screen.queryByTestId("project-cost-panel")).not.toBeInTheDocument();
   });
 
+  // On request: a per-project breakdown has nothing left to break down once
+  // the page is already narrowed to one project.
+  it("O4: hides By project once InstallScopeRow's dropdown filters to a single project", async () => {
+    installFetchMock(
+      baseHandlers({
+        "/api/projects": envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "cairn-2.0", parent: null },
+            { label: "wardstone", parent: null },
+          ],
+        }),
+      }),
+    );
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("project-cost-panel")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("install-scope-dropdown"));
+    fireEvent.click(screen.getByTestId("install-scope-option-wardstone"));
+
+    await waitFor(() => expect(screen.queryByTestId("project-cost-panel")).not.toBeInTheDocument());
+  });
+
   it("O1: shows an unpriced-model cost as unknown on the Breakdown panel", async () => {
     installFetchMock(baseHandlers({ "/api/rollup/timeseries": envelope(trendSeries(null)) }));
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("unknown"));
   });
 
   it("O1: switching to Calendar re-fetches every range-scoped panel at the 13w window", async () => {
     const fetchMock = installFetchMock(baseHandlers());
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("chart-bars")).toBeInTheDocument());
     fetchMock.mockClear();
@@ -130,7 +156,7 @@ describe("Overview", () => {
 
   it("O2: clicking a bar drills the Breakdown into that day, and a repeat click clears it", async () => {
     installFetchMock(baseHandlers());
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
 
@@ -143,9 +169,30 @@ describe("Overview", () => {
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
   });
 
+  // On request: the usage-limit row used to always show the whole range's
+  // event count regardless of which day was selected.
+  it("O2: the usage-limit row scopes to the selected day's own events", async () => {
+    installFetchMock(
+      baseHandlers({
+        "/api/usage-limit-events": envelope([
+          { id: 1, session_id: "sess-1", timestamp: "2026-09-20T10:00:00Z", raw_entry: "x", project: "cairn-2.0" },
+        ]),
+      }),
+    );
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("usage-limit-banner")).toHaveTextContent("once"));
+
+    // 2026-09-25 isn't the event's own day (2026-09-20) - the row should
+    // drop out entirely rather than keep showing the whole range's count.
+    fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
+    await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$12.40"));
+    expect(screen.queryByTestId("usage-limit-banner")).not.toBeInTheDocument();
+  });
+
   it("O3: renders aggregate By models/tools/agents, then drills them into the selected day", async () => {
     installFetchMock(baseHandlers());
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("by-models")).toHaveTextContent("sonnet-5"));
     expect(screen.getByTestId("by-tools")).toHaveTextContent("12 calls");
@@ -182,7 +229,7 @@ describe("Overview", () => {
         "/api/rollup/session": envelope([SESSION, OTHER_SESSION]),
       }),
     );
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("project-row-cairn-2.0")).toHaveTextContent("$12.40"));
     expect(screen.getByTestId("project-row-wardstone")).toHaveTextContent("$3.00");
@@ -196,7 +243,7 @@ describe("Overview", () => {
 
   it("O2: switching views clears the selected day", async () => {
     installFetchMock(baseHandlers());
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$41.10"));
     fireEvent.click(screen.getByTestId("chart-bar-2026-09-25"));
@@ -208,7 +255,7 @@ describe("Overview", () => {
 
   it("shows PanelError with a working retry when the Trend chart's timeseries fails", async () => {
     const fetchMock = installFetchMock(baseHandlers({ "/api/rollup/timeseries": serverError() }));
-    renderWithClient(<Overview activeTab="overview" onTabChange={noop} onSelectSession={noop} />);
+    renderWithClient(<Overview activeTab="overview" onTabChange={noop} />);
 
     expect(await screen.findByTestId("chart-error-text")).toHaveTextContent("Couldn't load — request failed");
     const callsBeforeRetry = fetchMock.mock.calls.length;
