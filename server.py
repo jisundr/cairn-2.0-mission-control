@@ -37,6 +37,7 @@ from urllib.parse import parse_qs, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db  # noqa: E402
 import pricing  # noqa: E402
+import tasks  # noqa: E402
 
 STATIC_DIR_NAME = "static"
 DEFAULT_PORT = 4317
@@ -685,18 +686,24 @@ class TokenMeteringApp:
         claude_projects_dir: Path | None = None,
         static_dir: Path | None = None,
         discovery_cache_ttl: float = _DISCOVERY_CACHE_TTL_SECONDS,
+        heartbeat_dir: Path | None = None,
     ):
         self.project_root = Path(project_root).resolve()
         self.known_projects_path = known_projects_path
         self.claude_projects_dir = Path(claude_projects_dir) if claude_projects_dir else DEFAULT_CLAUDE_PROJECTS_DIR
         self.static_dir = Path(static_dir) if static_dir else Path(__file__).resolve().parent / STATIC_DIR_NAME
         self.discovery_cache_ttl = discovery_cache_ttl
+        self.heartbeat_dir = Path(heartbeat_dir) if heartbeat_dir else tasks.DEFAULT_HEARTBEAT_DIR
         # One slot, scoped to this app instance's own `project_root`/
         # `known_projects_path` by construction - an app instance never
         # serves more than one root, so this can never become a second
         # structure indexed by `Project.label` (which a label collision or
         # rename between calls could invalidate or fragment).
         self._discovery_cache: tuple[float, list["Project"]] | None = None
+        # `tasks._gh_pr_merged`'s per-`(project, folder)` TTL cache - one
+        # dict for this app instance's whole lifetime, so it actually
+        # persists across requests rather than resetting every poll.
+        self._gh_pr_cache: dict = {}
 
     def projects(self) -> list[Project]:
         if self._discovery_cache is not None:
@@ -879,6 +886,13 @@ class TokenMeteringApp:
         since, until = range_bounds(range_key)
         return self._fetch_usage_limit_events(projects, since=since, until=until)
 
+    def tasks(self, project_filter: str | None = None) -> list[dict]:
+        """Kanban board cards (`tasks.py`'s own module docstring; PRD §6.1-
+        6.4, §9) - no time-range param, unlike the rollup endpoints above:
+        every task-folder card that exists is returned, always."""
+        projects = _filter_projects(self.projects(), project_filter)
+        return tasks.build_cards(projects, heartbeat_dir=self.heartbeat_dir, gh_cache=self._gh_pr_cache)
+
     def sessions(self, range_key: str, project_filter: str | None = None) -> list[dict]:
         projects = _filter_projects(self.projects(), project_filter)
         since, until = range_bounds(range_key)
@@ -954,6 +968,9 @@ class TokenMeteringApp:
                 },
                 "meta": {"generated_at": _iso(datetime.now(timezone.utc))},
             }
+
+        if path == "/api/tasks":
+            return 200, self._envelope(self.tasks(project_filter=first("project")))
 
         range_key = first("range", "7d")
         project_filter = first("project")

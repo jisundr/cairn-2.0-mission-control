@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import backfill  # noqa: E402
 import db  # noqa: E402
 import server  # noqa: E402
+import tasks  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -682,6 +683,109 @@ def test_handle_api_rejects_unknown_range():
     status, body = app.handle_api("/api/rollup/agent", {"range": ["bogus"]})
     assert status == 400
     assert "unknown range" in body["error"]
+
+
+# --------------------------------------------------------------------------
+# GET /api/tasks (kanban board cards - tasks.py's own module)
+# --------------------------------------------------------------------------
+
+
+def write_task_state(folder, *, goal="a goal", key_info="in progress"):
+    """A minimal, real `STATE.md` - route-level tests only need to prove
+    the fields make it through `_envelope`/`_filter_projects` correctly,
+    not re-exercise `tasks.py`'s own parsing/precedence unit tests."""
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "STATE.md").write_text(
+        f"---\ngoal: {goal}\nkey_info: {key_info}\npath: escalated\n---\n"
+        f"> The frontmatter above is the state read on resume.\n\n- 2026-01-01: started.\n"
+    )
+
+
+@pytest.fixture(autouse=True)
+def _no_real_gh_for_tasks_routes(monkeypatch):
+    """None of this file's synthetic project fixtures carry a
+    `.harness/workflow.md` saying direct-commit, so `/api/tasks` would
+    otherwise shell out to the real `gh` binary - mirrors
+    `test_tasks.py`'s own `_no_real_gh` fixture."""
+    def _no_gh(*args, **kwargs):
+        raise FileNotFoundError("gh not installed")
+
+    monkeypatch.setattr(tasks.subprocess, "run", _no_gh)
+
+
+def test_handle_api_tasks_lists_cards_across_multiple_projects(tmp_path):
+    root_a = make_project(tmp_path, "proj-a")
+    write_task_state(root_a / "docs/tasks/2026-01-01-0000-build-a", key_info="in progress")
+    root_b = make_project(tmp_path, "proj-b")
+    write_task_state(root_b / "docs/tasks/2026-01-02-0000-build-b", key_info="Done.")
+
+    known = tmp_path / "known-projects.json"
+    known.write_text(json.dumps([str(root_b)]))
+    app = server.TokenMeteringApp(root_a, known_projects_path=known)
+
+    status, body = app.handle_api("/api/tasks", {})
+
+    assert status == 200
+    folders = {(c["project"], c["folder"]) for c in body["data"]}
+    assert ("proj-a", "docs/tasks/2026-01-01-0000-build-a") in folders
+    assert ("proj-b", "docs/tasks/2026-01-02-0000-build-b") in folders
+    assert "generated_at" in body["meta"]
+
+
+def test_handle_api_tasks_excludes_template_folder(tmp_path):
+    root = make_project(tmp_path, "proj")
+    write_task_state(root / "docs/tasks/_template")
+    write_task_state(root / "docs/tasks/2026-01-01-0000-build-real")
+
+    app = server.TokenMeteringApp(root)
+    status, body = app.handle_api("/api/tasks", {})
+
+    assert status == 200
+    folders = [c["folder"] for c in body["data"]]
+    assert folders == ["docs/tasks/2026-01-01-0000-build-real"]
+
+
+def test_handle_api_tasks_never_errors_for_a_project_with_no_docs_tasks(tmp_path):
+    root = tmp_path / "bare-proj"
+    root.mkdir()
+    app = server.TokenMeteringApp(root)
+
+    status, body = app.handle_api("/api/tasks", {})
+
+    assert status == 200
+    assert body["data"] == []
+
+
+def test_handle_api_tasks_project_filter_scopes_to_one_project(tmp_path):
+    root_a = make_project(tmp_path, "proj-a")
+    write_task_state(root_a / "docs/tasks/2026-01-01-0000-build-a")
+    root_b = make_project(tmp_path, "proj-b")
+    write_task_state(root_b / "docs/tasks/2026-01-02-0000-build-b")
+
+    known = tmp_path / "known-projects.json"
+    known.write_text(json.dumps([str(root_b)]))
+    app = server.TokenMeteringApp(root_a, known_projects_path=known)
+
+    status, body = app.handle_api("/api/tasks", {"project": ["proj-a"]})
+
+    assert status == 200
+    assert [c["project"] for c in body["data"]] == ["proj-a"]
+
+
+def test_handle_api_tasks_reports_sub_tasks_only_on_a_folder_with_children(tmp_path):
+    root = make_project(tmp_path, "proj")
+    parent = root / "docs/tasks/2026-01-01-0000-build-parent"
+    write_task_state(parent)
+    write_task_state(parent / "01-first", key_info="Done.")
+    write_task_state(root / "docs/tasks/2026-01-02-0000-build-solo")
+
+    app = server.TokenMeteringApp(root)
+    status, body = app.handle_api("/api/tasks", {})
+
+    by_folder = {c["folder"]: c for c in body["data"]}
+    assert by_folder["docs/tasks/2026-01-01-0000-build-parent"]["sub_tasks"] == {"done": 1, "total": 1}
+    assert by_folder["docs/tasks/2026-01-01-0000-build-parent/01-first"]["sub_tasks"] is None
+    assert by_folder["docs/tasks/2026-01-02-0000-build-solo"]["sub_tasks"] is None
 
 
 # --------------------------------------------------------------------------
