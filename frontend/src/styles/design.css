@@ -448,7 +448,7 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .kanban-column-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 10px; }
 .kanban-column-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
 .kanban-column-count { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink-faint); background: var(--border-soft); border-radius: 10px; padding: 1px 7px; }
-.kanban-column-cards { display: flex; flex-direction: column; gap: 8px; max-height: 600px; overflow-y: auto; }
+.kanban-column-cards { display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 320px); min-height: 240px; overflow-y: auto; }
 .kanban-column-cards .btn-block { margin-top: 0; }
 .kanban-column-end { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); text-align: center; padding: 12px 4px 4px; }
 .kcard { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 11px 13px; display: flex; flex-direction: column; min-width: 0; }
