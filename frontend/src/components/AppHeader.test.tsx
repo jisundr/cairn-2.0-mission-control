@@ -59,6 +59,22 @@ describe("AppHeader", () => {
     document.title = BASE_TITLE;
   });
 
+  it("renders the refresh button spinning, disabled and busy only while refreshing", async () => {
+    installFetchMock({ "/api/tasks": () => envelope([]) });
+    const view = renderHeader(newClient(), { refreshing: true });
+
+    const busy = screen.getByRole("button", { name: "Refresh now" });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute("aria-busy", "true");
+    expect(busy).toHaveClass("spinning");
+    view.unmount();
+
+    renderHeader(newClient());
+    const idle = screen.getByRole("button", { name: "Refresh now" });
+    expect(idle).toBeEnabled();
+    expect(idle).not.toHaveClass("spinning");
+  });
+
   it("marks the active tab and calls onTabChange when another tab is clicked", async () => {
     installFetchMock({ "/api/tasks": () => envelope([]) });
     const onTabChange = vi.fn();

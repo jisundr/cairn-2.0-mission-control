@@ -8,6 +8,7 @@ import { PanelError } from "../components/PanelError";
 import { StateCard } from "../components/StateCard";
 import { TaskCard } from "../components/TaskCard";
 import { TaskDrawer } from "../components/TaskDrawer";
+import { formatRelativeToNow } from "../lib/format";
 
 type DrawerTab = "details" | "docs";
 
@@ -89,6 +90,21 @@ export function Kanban({
     setShown(initialShown());
   }, [boardProject]);
 
+  // Click-driven only (never `isFetching`), so the 5s poll never spins the
+  // button. Refetches every query the board and its header show.
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await Promise.allSettled([projects.refetch(), tasks.refetch(), allTasks.refetch()]);
+    } finally {
+      setRefreshing(false);
+      setLastUpdated(new Date());
+    }
+  }
+
   const grouped = Object.fromEntries(COLUMNS.map((c) => [c.key, [] as TaskCardData[]])) as Record<
     TaskColumn,
     TaskCardData[]
@@ -101,10 +117,9 @@ export function Kanban({
         activeTab={activeTab}
         onTabChange={onTabChange}
         connected={!projects.isError}
-        onRefresh={() => {
-          projects.refetch();
-          tasks.refetch();
-        }}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+        updatedLabel={lastUpdated ? `updated ${formatRelativeToNow(lastUpdated.toISOString())}` : null}
       />
 
       <InstallScopeRow

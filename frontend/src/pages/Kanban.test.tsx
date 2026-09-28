@@ -196,6 +196,59 @@ describe("Kanban", () => {
     expect(screen.getAllByTestId("kcard-parent")).toHaveLength(2);
   });
 
+  it("Refresh now refetches projects, the filtered tasks list and the unfiltered tasks list, spinning until they settle", async () => {
+    const calls: string[] = [];
+    let hold: Promise<void> | null = null;
+    let release: (() => void) | undefined;
+    const fetchMock = installFetchMock({
+      "/api/projects": () => {
+        calls.push("projects");
+        return envelope({ hostname: "test-host", projects: [{ label: "project-a", parent: null }, { label: "project-b", parent: null }] });
+      },
+      "/api/tasks": (params) => {
+        calls.push(`tasks:${params.get("project") ?? ""}`);
+        return envelope([task({ folder: "docs/tasks/2026-09-01-0900-ready-one", project: "project-a" })]);
+      },
+    });
+    const inner = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input) => {
+      if (hold && String(input).startsWith("/api/tasks")) await hold;
+      return inner!(input);
+    });
+    renderKanban({ boardProject: "project-a" });
+
+    await screen.findByTestId("task-card-docs/tasks/2026-09-01-0900-ready-one");
+    await waitFor(() => expect(calls).toEqual(expect.arrayContaining(["projects", "tasks:project-a", "tasks:"])));
+    const before = calls.length;
+    hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const button = screen.getByRole("button", { name: "Refresh now" });
+    expect(document.querySelector(".updated-at")).toBeNull();
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveClass("spinning");
+    release?.();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(button).not.toHaveClass("spinning");
+    const fresh = calls.slice(before);
+    expect(fresh).toEqual(expect.arrayContaining(["projects", "tasks:project-a", "tasks:"]));
+    expect(document.querySelector(".updated-at")).toHaveTextContent(/^updated/);
+  });
+
+  it("Refresh now on an unfiltered board re-enables the button and shows the updated label", async () => {
+    install([task()]);
+    renderKanban();
+
+    await screen.findByTestId("task-card-docs/tasks/2026-09-28-1345-build-kanban-board");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh now" }));
+
+    await waitFor(() => expect(document.querySelector(".updated-at")).toHaveTextContent(/^updated/));
+    expect(screen.getByRole("button", { name: "Refresh now" })).toBeEnabled();
+  });
+
   it("shows the empty state when the project has no task folders", async () => {
     install([]);
     renderKanban();

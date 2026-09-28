@@ -179,6 +179,10 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 }
 .icon-btn:hover { border-color: var(--ink-soft); color: var(--ink); background: var(--panel-sunken); }
 .icon-btn svg { width: 13px; height: 13px; }
+.icon-btn:disabled { cursor: default; opacity: 0.7; }
+.icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .icon-btn.spinning svg { animation: none; } }
 
 /* Kanban's persistent Needs Attention header pill (PRD §6.9) - visible from
    every tab via AppHeader, not just Kanban itself. No mockup shows this

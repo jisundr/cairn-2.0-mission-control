@@ -17,7 +17,7 @@ import { RefreshIcon, VolumeIcon } from "./icons";
 // every tab-bar screen (Overview, Sessions List). The Session Drilldown
 // screen replaces this entirely with its own `.drill-header` (App.tsx never
 // mounts this component while a session is open). `showTabs`/`onRefresh`/
-// `updatedLabel` are each independently optional because the mockups don't
+// `updatedLabel`/`refreshing` are each independently optional because the mockups don't
 // render the same right-hand cluster on every screen: overview-empty.html
 // keeps the nav but drops refresh/updated-at; overview-disconnected.html
 // drops the nav entirely too; sessions-list-*.html keeps refresh but never
@@ -45,6 +45,9 @@ interface AppHeaderProps {
   showTabs?: boolean;
   onRefresh?: () => void;
   updatedLabel?: string | null;
+  // True while a click-triggered refresh is in flight: the refresh button
+  // spins and is disabled. Pages that omit it are unchanged.
+  refreshing?: boolean;
 }
 
 export function AppHeader({
@@ -54,6 +57,7 @@ export function AppHeader({
   showTabs = true,
   onRefresh,
   updatedLabel,
+  refreshing,
 }: AppHeaderProps) {
   const [navOpen, setNavOpen] = useState(false);
   const [muted, setMutedState] = useState(() => isMuted());
@@ -181,7 +185,14 @@ export function AppHeader({
           title={connected ? "Connected to the local server" : "Can't reach the local server"}
         />
         {onRefresh && (
-          <button className="icon-btn" title="Refresh now" aria-label="Refresh now" onClick={onRefresh}>
+          <button
+            className={refreshing ? "icon-btn spinning" : "icon-btn"}
+            title="Refresh now"
+            aria-label="Refresh now"
+            aria-busy={refreshing}
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
             <RefreshIcon />
           </button>
         )}
