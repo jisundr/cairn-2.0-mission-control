@@ -356,9 +356,15 @@ table.sessions a.sess:hover { text-decoration: underline; }
    toolcall's own panel-sunken background at a glance), and toolcall drops
    its all-around dashed border in favor of a centered, near-full-width
    layout - a "system event" read distinct from either chat bubble's own
-   left/right alignment, without a side-accent border (flagged as an
-   AI-UI tell by the design hook - the centered layout, mono font, and
-   dot marker already carry the distinction). */
+   left/right alignment. */
+/* Visual-polish pass: a turn's tool-calls are one continuous sequence of
+   steps, not a set of disconnected pills, so `.toolcall-thread` now carries
+   a vertical connector (`::before`) threading behind its rows - each
+   still-centered `.toolcall` sits on top of it, so the line only shows in
+   the gaps between rows. This supersedes the centered layout's earlier
+   sole reliance on mono font + dot marker to read as "one system event
+   sequence"; `.toolcall` itself keeps its centered alignment (only a
+   connector was added, not a left-accent-bar restyle). */
 /* `.transcript` only ever has one direct DOM child (react-virtual's sizing
    wrapper - see Drilldown.tsx) - this `gap` never reaches the individual
    turns, which are absolutely-positioned siblings inside that one child, so
@@ -377,10 +383,15 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .bubble { max-width: 74%; padding: 11px 15px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; }
 .bubble.prompt { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 2px; }
 .bubble.response { align-self: flex-end; background: var(--add-bg); border: 1px solid var(--border-soft); border-bottom-right-radius: 2px; }
-.toolcall-thread { display: flex; flex-direction: column; gap: 6px; }
+.toolcall-thread { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.toolcall-thread::before {
+  content: ""; position: absolute; top: 4px; bottom: 4px; left: 50%; width: 1px;
+  background: var(--border); transform: translateX(-50%); z-index: 0;
+}
 .toolcall {
+  position: relative; z-index: 1;
   align-self: center; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 6px;
-  background: var(--panel-sunken); font-family: var(--mono); font-size: 10.5px;
+  background: var(--panel-sunken); font-family: var(--mono); font-size: 11px; line-height: 1.4;
   color: var(--ink-soft); max-width: 82%;
 }
 .toolcall .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
