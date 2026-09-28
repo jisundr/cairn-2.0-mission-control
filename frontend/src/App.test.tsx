@@ -33,7 +33,7 @@ function task(overrides: Partial<TaskCard> = {}): TaskCard {
     goal: "A task.",
     key_info: "in progress",
     last_log_date: "2026-09-28",
-    column: "ready",
+    column: "planned",
     active: false,
     needs_attention: false,
     done: false,

@@ -55,7 +55,7 @@ function removeHeartbeats() {
 test.describe("kanban parallel-session liveness (§8)", () => {
   test.afterEach(removeHeartbeats);
 
-  test("two fresh heartbeats both read ongoing; aging one drops only it out of Ongoing", async ({ page }) => {
+  test("two fresh heartbeats both read active; aging one drops only its active badge", async ({ page }) => {
     // Defensive: a prior local run that failed before its own afterEach
     // ran would otherwise leave a stale file behind.
     removeHeartbeats();

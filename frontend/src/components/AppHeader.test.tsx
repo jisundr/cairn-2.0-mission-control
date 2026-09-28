@@ -15,7 +15,7 @@ function task(overrides: Partial<TaskCard> = {}): TaskCard {
     goal: "goal",
     key_info: "needs-human",
     last_log_date: "2026-09-28",
-    column: "needs_attention",
+    column: "building",
     active: false,
     needs_attention: true,
     done: false,
@@ -118,7 +118,7 @@ describe("AppHeader", () => {
 
   describe("attention signaling (PRD §6.9)", () => {
     it("shows no pill and the plain title when there's nothing to flag", async () => {
-      installFetchMock({ "/api/tasks": () => envelope([task({ column: "ready" })]) });
+      installFetchMock({ "/api/tasks": () => envelope([task({ column: "planned", needs_attention: false })]) });
       renderHeader(newClient());
 
       await waitFor(() => expect(document.title).toBe(BASE_TITLE));

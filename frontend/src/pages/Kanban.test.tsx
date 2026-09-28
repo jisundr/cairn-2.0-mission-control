@@ -18,7 +18,7 @@ function task(overrides: Partial<TaskCard> = {}): TaskCard {
     goal: "Cross-project kanban board in mission-control.",
     key_info: "in progress",
     last_log_date: "2026-09-28",
-    column: "ready",
+    column: "planned",
     active: false,
     needs_attention: false,
     done: false,
@@ -96,11 +96,49 @@ describe("Kanban", () => {
     _resetAttentionModuleStateForTests();
   });
 
-  it("groups a real /api/tasks response into its 4 columns", async () => {
+  it("renders the six lifecycle stage columns in order", async () => {
+    install([task()]);
+    renderKanban();
+
+    await waitFor(() => expect(screen.getByText("build-kanban-board")).toBeInTheDocument());
+    const titles = screen.getAllByText(/./, { selector: ".kanban-column-title" });
+    expect(titles.map((el) => el.textContent)).toEqual([
+      "Scoping",
+      "Awaiting approval",
+      "Planned",
+      "Building",
+      "In review",
+      "Done",
+    ]);
+  });
+
+  it("shows attention and active as badges inside the card's own stage column, and no attention badge on an awaiting-approval card", async () => {
     install([
-      task({ folder: "docs/tasks/2026-09-01-0900-ready-one", column: "ready" }),
-      task({ folder: "docs/tasks/2026-09-02-0900-attn-one", column: "needs_attention", key_info: "needs-human" }),
-      task({ folder: "docs/tasks/2026-09-03-0900-ongoing-one", column: "ongoing" }),
+      task({ folder: "docs/tasks/2026-09-02-0900-attn-one", column: "building", needs_attention: true, key_info: "needs-human" }),
+      task({ folder: "docs/tasks/2026-09-03-0900-live-one", column: "building", active: true }),
+      task({
+        folder: "docs/tasks/2026-09-06-0900-await-one",
+        column: "awaiting_approval",
+        key_info: "awaiting plan approval",
+      }),
+    ]);
+    renderKanban();
+
+    const attn = await screen.findByTestId("task-card-docs/tasks/2026-09-02-0900-attn-one");
+    expect(attn.closest(".kanban-column-cards")?.previousElementSibling).toHaveTextContent("Building");
+    expect(within(attn).getByText("needs-human")).toBeInTheDocument();
+    const live = screen.getByTestId("task-card-docs/tasks/2026-09-03-0900-live-one");
+    expect(within(live).getByText("active")).toBeInTheDocument();
+    const await1 = screen.getByTestId("task-card-docs/tasks/2026-09-06-0900-await-one");
+    expect(await1.closest(".kanban-column-cards")?.previousElementSibling).toHaveTextContent("Awaiting approval");
+    expect(await1.querySelector(".kcard-attn")).toBeNull();
+  });
+
+  it("groups a real /api/tasks response into its columns", async () => {
+    install([
+      task({ folder: "docs/tasks/2026-09-01-0900-ready-one", column: "scoping" }),
+      task({ folder: "docs/tasks/2026-09-02-0900-attn-one", column: "building", needs_attention: true, key_info: "needs-human" }),
+      task({ folder: "docs/tasks/2026-09-03-0900-ongoing-one", column: "in_review" }),
       task({ folder: "docs/tasks/2026-09-04-0900-done-one", column: "done" }),
       task({ folder: "docs/tasks/2026-09-05-0900-done-two", column: "done" }),
     ]);
@@ -113,7 +151,7 @@ describe("Kanban", () => {
     expect(screen.getByText("done-two")).toBeInTheDocument();
 
     const columns = screen.getAllByText(/^\d+$/, { selector: ".kanban-column-count" });
-    expect(columns.map((el) => el.textContent)).toEqual(["1", "1", "1", "2"]);
+    expect(columns.map((el) => el.textContent)).toEqual(["1", "0", "0", "1", "1", "2"]);
   });
 
   it("renders two sibling sub-task cards under the same parent as ordinary cards in different columns, and shows the parent's own N of M done bar", async () => {
@@ -121,7 +159,7 @@ describe("Kanban", () => {
     install([
       task({
         folder: parentFolder,
-        column: "ready",
+        column: "building",
         sub_tasks: { done: 1, total: 2 },
       }),
       task({
@@ -132,7 +170,8 @@ describe("Kanban", () => {
       task({
         folder: `${parentFolder}/02-build-second`,
         parent: parentFolder,
-        column: "needs_attention",
+        column: "building",
+        needs_attention: true,
         key_info: "stalled",
       }),
     ]);
@@ -157,7 +196,7 @@ describe("Kanban", () => {
 
   it("reports a clicked card's folder and its own already-known project up via onOpenTask (§6.5's wiring, not the drawer's own content)", async () => {
     const folder = "docs/tasks/2026-09-01-0900-ready-one";
-    install([task({ folder, column: "ready", project: "cairn-2.0" })]);
+    install([task({ folder, column: "planned", project: "cairn-2.0" })]);
     const onOpenTask = vi.fn();
     renderKanban({ onOpenTask });
 
@@ -189,7 +228,7 @@ describe("Kanban", () => {
           folder,
           parent: null,
           kind: "build",
-          column: "ready",
+          column: "planned",
           frontmatter: { goal: params.get("project") === "project-b" ? "Project B's own task" : "Project A's own task" },
           activity: [],
           draft_content: null,
@@ -213,17 +252,17 @@ describe("Kanban", () => {
 
   it("mounts the drawer once openTask's project resolves from the (unfiltered) task list", async () => {
     const folder = "docs/tasks/2026-09-01-0900-ready-one";
-    install([task({ folder, column: "ready" })]);
+    install([task({ folder, column: "planned" })]);
     installFetchMock({
       "/api/projects": () => envelope({ hostname: "test-host", projects: [{ label: "cairn-2.0", parent: null }] }),
-      "/api/tasks": () => envelope([task({ folder, column: "ready" })]),
+      "/api/tasks": () => envelope([task({ folder, column: "planned" })]),
       "/api/tasks/detail": () =>
         envelope({
           project: "cairn-2.0",
           folder,
           parent: null,
           kind: "build",
-          column: "ready",
+          column: "planned",
           frontmatter: { goal: "g" },
           activity: [],
           draft_content: null,
@@ -274,14 +313,14 @@ describe("Kanban", () => {
 
   it("pages a column's cards behind a manual See more control, and shows the end marker once exhausted", async () => {
     const tasks = Array.from({ length: 25 }, (_, i) =>
-      task({ folder: `docs/tasks/2026-09-01-0900-ready-${i}`, column: "ready" }),
+      task({ folder: `docs/tasks/2026-09-01-0900-ready-${i}`, column: "planned" }),
     );
     install(tasks);
     renderKanban();
 
     await waitFor(() => expect(screen.getByTestId(`task-card-${tasks[0].folder}`)).toBeInTheDocument());
     expect(screen.queryByTestId(`task-card-${tasks[20].folder}`)).not.toBeInTheDocument();
-    const seeMore = screen.getByTestId("kanban-see-more-ready");
+    const seeMore = screen.getByTestId("kanban-see-more-planned");
     expect(seeMore).toHaveTextContent("See more");
 
     fireEvent.click(seeMore);
@@ -289,14 +328,14 @@ describe("Kanban", () => {
     for (const t of tasks) {
       expect(screen.getByTestId(`task-card-${t.folder}`)).toBeInTheDocument();
     }
-    expect(screen.queryByTestId("kanban-see-more-ready")).not.toBeInTheDocument();
-    expect(screen.getByTestId("kanban-end-ready")).toHaveTextContent("End of Ready");
+    expect(screen.queryByTestId("kanban-see-more-planned")).not.toBeInTheDocument();
+    expect(screen.getByTestId("kanban-end-planned")).toHaveTextContent("End of Planned");
   });
 
   it("resets a column's paging back to page 1 when the board's project filter changes, even after paging past the end (shown state is owned by Kanban itself, one level above the keyed kanban-columns subtree)", async () => {
     const readyTasksFor = (project: string) =>
       Array.from({ length: 25 }, (_, i) =>
-        task({ folder: `docs/tasks/2026-09-01-0900-${project}-ready-${i}`, column: "ready", project }),
+        task({ folder: `docs/tasks/2026-09-01-0900-${project}-ready-${i}`, column: "planned", project }),
       );
     installFetchMock({
       "/api/projects": () =>
@@ -314,23 +353,23 @@ describe("Kanban", () => {
     // Page past the end of project-a's ready column (25 cards, PAGE_SIZE 20
     // - one "See more" click reveals all 25 and replaces the button with the
     // end marker).
-    await waitFor(() => expect(screen.getByTestId("kanban-see-more-ready")).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId("kanban-see-more-ready"));
-    await waitFor(() => expect(screen.getByTestId("kanban-end-ready")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("kanban-see-more-planned")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("kanban-see-more-planned"));
+    await waitFor(() => expect(screen.getByTestId("kanban-end-planned")).toBeInTheDocument());
 
     rerenderKanban({ boardProject: "project-b" });
 
     // project-b also has 25 ready cards - if `shown.ready` had carried over
     // (the bug), the end marker would still be showing all 25. A real reset
     // brings back the first page only, with "See more" reappearing.
-    await waitFor(() => expect(screen.getByTestId("kanban-see-more-ready")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("kanban-see-more-planned")).toBeInTheDocument());
     expect(screen.getByTestId("task-card-docs/tasks/2026-09-01-0900-project-b-ready-0")).toBeInTheDocument();
     expect(screen.queryByTestId("task-card-docs/tasks/2026-09-01-0900-project-b-ready-24")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("kanban-end-ready")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kanban-end-planned")).not.toBeInTheDocument();
   });
 
   it("shows the end marker on a column with no cards, without triggering the board's own all-empty state", async () => {
-    install([task({ folder: "docs/tasks/2026-09-01-0900-ready-one", column: "ready" })]);
+    install([task({ folder: "docs/tasks/2026-09-01-0900-ready-one", column: "planned" })]);
     renderKanban();
 
     await waitFor(() => expect(screen.getByTestId("kanban-end-done")).toBeInTheDocument());

@@ -12,7 +12,7 @@ function task(overrides: Partial<TaskCardData> = {}): TaskCardData {
     goal: "Cross-project kanban board in mission-control.",
     key_info: "in progress",
     last_log_date: "2026-09-28",
-    column: "ready",
+    column: "planned",
     active: false,
     needs_attention: false,
     done: false,
@@ -58,17 +58,27 @@ describe("TaskCard", () => {
     expect(document.querySelector(".kcard-progress")).not.toBeInTheDocument();
   });
 
-  it("shows the matched attention trigger phrase only for a Needs Attention card", () => {
-    render(<TaskCard task={task({ column: "needs_attention", key_info: "stalled since last week" })} showProject={false} />);
+  it("shows the matched attention trigger phrase for a needs_attention card in any column", () => {
+    render(
+      <TaskCard task={task({ column: "building", needs_attention: true, key_info: "stalled since last week" })} showProject={false} />,
+    );
     expect(screen.getByText("stalled")).toBeInTheDocument();
+    expect(screen.queryByText("active")).not.toBeInTheDocument();
   });
 
-  it("shows the active badge only for an Ongoing card", () => {
-    render(<TaskCard task={task({ column: "ongoing" })} showProject={false} />);
+  it("shows the active badge for an active card", () => {
+    render(<TaskCard task={task({ column: "building", active: true })} showProject={false} />);
     expect(screen.getByText("active")).toBeInTheDocument();
+    expect(document.querySelector(".kcard-attn")).not.toBeInTheDocument();
   });
 
-  it("shows neither the attention nor the active badge for a Ready or Done card", () => {
+  it("shows both badges together when a card is active and needs attention", () => {
+    render(<TaskCard task={task({ column: "building", active: true, needs_attention: true, key_info: "needs-human" })} showProject={false} />);
+    expect(screen.getByText("active")).toBeInTheDocument();
+    expect(screen.getByText("needs-human")).toBeInTheDocument();
+  });
+
+  it("shows neither badge when neither boolean is set", () => {
     render(<TaskCard task={task({ column: "done" })} showProject={false} />);
     expect(screen.queryByText("active")).not.toBeInTheDocument();
     expect(document.querySelector(".kcard-attn")).not.toBeInTheDocument();

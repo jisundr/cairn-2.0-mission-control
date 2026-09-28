@@ -22,7 +22,7 @@ function task(overrides: Partial<TaskCard> = {}): TaskCard {
     goal: "goal",
     key_info: "needs-human",
     last_log_date: "2026-09-28",
-    column: "needs_attention",
+    column: "building",
     active: false,
     needs_attention: true,
     done: false,
@@ -37,8 +37,8 @@ beforeEach(() => {
 });
 
 describe("needsAttentionCount / titleForCount", () => {
-  it("counts only needs_attention cards and formats the title badge", () => {
-    const tasks = [task({ folder: "a" }), task({ folder: "b", column: "ready" }), task({ folder: "c" })];
+  it("counts only needs_attention cards, whatever column they sit in and formats the title badge", () => {
+    const tasks = [task({ folder: "a" }), task({ folder: "b", column: "planned", needs_attention: false }), task({ folder: "c" })];
     expect(needsAttentionCount(tasks)).toBe(2);
     expect(titleForCount(2)).toBe("(2) Mission Control");
   });
@@ -53,8 +53,7 @@ describe("attentionLabel", () => {
   it("matches each PRD §6.2 trigger phrase", () => {
     expect(attentionLabel("needs-human: pick a direction")).toBe("needs-human");
     expect(attentionLabel("stalled since last week")).toBe("stalled");
-    expect(attentionLabel("awaiting requirements approval")).toBe("awaiting approval");
-    expect(attentionLabel("awaiting plan approval")).toBe("awaiting approval");
+    expect(attentionLabel("awaiting plan approval")).toBe("needs attention");
     expect(attentionLabel("something else entirely")).toBe("needs attention");
   });
 });

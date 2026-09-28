@@ -189,8 +189,8 @@ def seed_task_folder(project_root: Path) -> None:
 def seed_heartbeat_task_folders(project_root: Path) -> None:
     """Two more `docs/tasks/` folders, `research`-kind and worded so neither
     `_needs_attention_fact` nor `_done_fact` fires - column here is
-    otherwise (`ready`), so `kanban-liveness.spec.ts` can attribute an
-    `ongoing` card verbatim to its own synthetic heartbeat file, not to
+    otherwise the `scoping` stage or later, with no attention signal, so `kanban-liveness.spec.ts` can attribute an
+    `active` badge verbatim to its own synthetic heartbeat file, not to
     frontmatter wording."""
     for folder_rel, label in ((HEARTBEAT_TASK_FOLDER_A, "a"), (HEARTBEAT_TASK_FOLDER_B, "b")):
         folder = project_root / folder_rel

@@ -13,7 +13,9 @@ function detail(overrides: Partial<TaskDetail> = {}): TaskDetail {
     folder: "docs/tasks/2026-09-28-1345-build-kanban-board",
     parent: null,
     kind: "build",
-    column: "ready",
+    column: "planned",
+    active: false,
+    needs_attention: false,
     frontmatter: { goal: "Ship the kanban board.", key_info: "in progress" },
     activity: [{ date: "2026-09-01", text: "started." }],
     draft_content: null,
@@ -89,8 +91,8 @@ describe("TaskDrawer", () => {
     const fetchMock = installDetail(
       detail({
         sub_tasks: [
-          { folder: "docs/tasks/parent/01-first", column: "done", goal: "First sub-task" },
-          { folder: "docs/tasks/parent/02-second", column: "needs_attention", goal: "Second sub-task" },
+          { folder: "docs/tasks/parent/01-first", column: "done", active: false, needs_attention: false, goal: "First sub-task" },
+          { folder: "docs/tasks/parent/02-second", column: "building", active: true, needs_attention: true, goal: "Second sub-task" },
         ],
       }),
     );
@@ -159,9 +161,9 @@ describe("TaskDrawer", () => {
     await waitFor(() => expect(screen.getByTestId("docs-empty")).toBeInTheDocument());
   });
 
-  it("shows the prompt composer on a needs_attention card, pre-filled from key_info, and it makes zero network requests when used", async () => {
+  it("shows the prompt composer on a needs-attention card in any column, pre-filled from key_info, and it makes zero network requests when used", async () => {
     const fetchMock = renderDrawer(
-      detail({ column: "needs_attention", frontmatter: { key_info: "needs-human: pick a direction" } }),
+      detail({ column: "building", needs_attention: true, frontmatter: { key_info: "needs-human: pick a direction" } }),
     );
 
     await waitFor(() => expect(screen.getByTestId("reply-composer")).toBeInTheDocument());
@@ -179,10 +181,10 @@ describe("TaskDrawer", () => {
     expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 
-  it("shows the prompt composer on a ready card too, pre-filled from goal/done_when", async () => {
+  it("shows the prompt composer on a planned card too, pre-filled from goal/done_when", async () => {
     renderDrawer(
       detail({
-        column: "ready",
+        column: "planned",
         frontmatter: { goal: "Ship the kanban board.", done_when: "All four columns render live data." },
       }),
     );
@@ -194,11 +196,35 @@ describe("TaskDrawer", () => {
     expect(within(screen.getByTestId("reply-composer")).queryByText(/needs attention/i)).not.toBeInTheDocument();
   });
 
-  it("never renders the prompt composer on a card that's neither ready nor needs_attention", async () => {
-    renderDrawer(detail({ column: "ongoing" }));
+  it("never renders the prompt composer on a card that's neither planned nor needs-attention", async () => {
+    renderDrawer(detail({ column: "building", active: true }));
 
     await waitFor(() => expect(screen.getByText("Ship the kanban board.")).toBeInTheDocument());
     expect(screen.queryByTestId("reply-composer")).not.toBeInTheDocument();
+  });
+
+  it("shows the stage chip plus attention and active badges in the header and on sub-task rows, from the response booleans", async () => {
+    renderDrawer(
+      detail({
+        column: "building",
+        active: true,
+        needs_attention: true,
+        frontmatter: { key_info: "stalled since friday" },
+        sub_tasks: [
+          { folder: "docs/tasks/parent/01-first", column: "in_review", active: false, needs_attention: true, goal: "First" },
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByTestId("subtask-row-docs/tasks/parent/01-first")).toBeInTheDocument());
+    const header = document.querySelector(".drawer-badges") as HTMLElement;
+    expect(within(header).getByText("Building")).toBeInTheDocument();
+    expect(within(header).getByText("stalled")).toBeInTheDocument();
+    expect(within(header).getByText("active")).toBeInTheDocument();
+    const row = screen.getByTestId("subtask-row-docs/tasks/parent/01-first");
+    expect(within(row).getByText("In review")).toBeInTheDocument();
+    expect(within(row).getByText("needs attention")).toBeInTheDocument();
+    expect(within(row).queryByText("active")).not.toBeInTheDocument();
   });
 
   it("shows a parent link in the header when the task has one, re-opening the drawer on click", async () => {
@@ -226,8 +252,8 @@ describe("TaskDrawer", () => {
     renderDrawer(
       detail({
         sub_tasks: [
-          { folder: "docs/tasks/parent/01-first", column: "done", goal: "First" },
-          { folder: "docs/tasks/parent/02-second", column: "ready", goal: "Second" },
+          { folder: "docs/tasks/parent/01-first", column: "done", active: false, needs_attention: false, goal: "First" },
+          { folder: "docs/tasks/parent/02-second", column: "planned", active: false, needs_attention: false, goal: "Second" },
         ],
       }),
     );
@@ -237,7 +263,7 @@ describe("TaskDrawer", () => {
   });
 
   it("shows a singular sub-task count for exactly one child", async () => {
-    renderDrawer(detail({ sub_tasks: [{ folder: "docs/tasks/parent/01-first", column: "done", goal: "First" }] }));
+    renderDrawer(detail({ sub_tasks: [{ folder: "docs/tasks/parent/01-first", column: "done", active: false, needs_attention: false, goal: "First" }] }));
 
     await waitFor(() => expect(screen.getByTestId("drawer-subtask-count")).toBeInTheDocument());
     expect(screen.getByTestId("drawer-subtask-count")).toHaveTextContent("1 sub-task");
