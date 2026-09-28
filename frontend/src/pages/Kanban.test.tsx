@@ -46,6 +46,8 @@ function renderKanban(overrides: Partial<Parameters<typeof Kanban>[0]> = {}) {
       openTaskProject={null}
       drawerTab="details"
       onOpenTask={noop}
+      boardProject={undefined}
+      onBoardProjectChange={noop}
       {...overrides}
     />,
   );
@@ -197,6 +199,42 @@ describe("Kanban", () => {
     renderKanban({ openTask: folder, drawerTab: "details" });
 
     await waitFor(() => expect(screen.getByTestId("task-drawer")).toBeInTheDocument());
+  });
+
+  it("reports a picked project up via onBoardProjectChange rather than filtering from local state (the filter now lives in App.tsx's URL)", async () => {
+    install(
+      [task({ folder: "docs/tasks/2026-09-01-0900-ready-one", project: "project-a" })],
+      [
+        { label: "project-a", parent: null },
+        { label: "project-b", parent: null },
+      ],
+    );
+    const onBoardProjectChange = vi.fn();
+    renderKanban({ onBoardProjectChange });
+
+    await waitFor(() => expect(screen.getByTestId("install-scope-dropdown")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("install-scope-dropdown"));
+    fireEvent.click(screen.getByTestId("install-scope-option-project-b"));
+
+    expect(onBoardProjectChange).toHaveBeenCalledWith("project-b");
+  });
+
+  it("renders the chip and clears via onBoardProjectChange when boardProject is already set (reload-restored filter, not local state)", async () => {
+    install(
+      [task({ folder: "docs/tasks/2026-09-01-0900-ready-one", project: "project-a" })],
+      [
+        { label: "project-a", parent: null },
+        { label: "project-b", parent: null },
+      ],
+    );
+    const onBoardProjectChange = vi.fn();
+    renderKanban({ boardProject: "project-a", onBoardProjectChange });
+
+    const chip = await screen.findByTestId("install-scope-chip");
+    expect(chip).toHaveTextContent("project-a");
+    fireEvent.click(within(chip).getByTitle("Clear filter"));
+
+    expect(onBoardProjectChange).toHaveBeenCalledWith(undefined);
   });
 
   it("shows an error state with retry when /api/tasks fails", async () => {

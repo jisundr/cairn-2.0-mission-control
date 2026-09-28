@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useProjects, useTasks } from "../api/hooks";
 import type { TaskCard as TaskCardData, TaskColumn } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
@@ -25,6 +24,11 @@ interface KanbanProps {
   openTaskProject: string | null;
   drawerTab: DrawerTab;
   onOpenTask: (task: string | null, tab?: DrawerTab, project?: string) => void;
+  // The board's own visible project filter - unlike `openTaskProject` above,
+  // this one lives in the URL (App.tsx's `?project=`) so a reload restores
+  // it, matching every other filter in this app.
+  boardProject: string | undefined;
+  onBoardProjectChange: (project: string | undefined) => void;
 }
 
 const COLUMNS: { key: TaskColumn; title: string }[] = [
@@ -41,13 +45,20 @@ const COLUMNS: { key: TaskColumn; title: string }[] = [
 // AppHeader/InstallScopeRow verbatim (§9's install-type-reuse note - no new
 // UI for single- vs. multi-project); the pill/title/favicon/chime (§6.9)
 // already live inside AppHeader itself, not duplicated here.
-export function Kanban({ activeTab, onTabChange, openTask, openTaskProject, drawerTab, onOpenTask }: KanbanProps) {
-  const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
-
+export function Kanban({
+  activeTab,
+  onTabChange,
+  openTask,
+  openTaskProject,
+  drawerTab,
+  onOpenTask,
+  boardProject,
+  onBoardProjectChange,
+}: KanbanProps) {
   const projects = useProjects();
   const hostTag = projects.data?.hostname ?? "localhost";
   const multiProject = (projects.data?.projects.length ?? 0) > 1;
-  const tasks = useTasks(projectFilter);
+  const tasks = useTasks(boardProject);
   // Unfiltered, so a drawer opened via a shared/reloaded URL can resolve its
   // folder's `project` even when the board's own dropdown has narrowed to a
   // different project - shares its cache/query with AppHeader's own
@@ -80,8 +91,8 @@ export function Kanban({ activeTab, onTabChange, openTask, openTaskProject, draw
       <InstallScopeRow
         projects={projects.data?.projects ?? []}
         hostTag={hostTag}
-        selectedProject={projectFilter}
-        onSelectProject={setProjectFilter}
+        selectedProject={boardProject}
+        onSelectProject={onBoardProjectChange}
       />
 
       {tasks.isError ? (

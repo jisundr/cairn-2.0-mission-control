@@ -7,7 +7,7 @@ import { SessionsList } from "./pages/SessionsList";
 
 type DrawerTab = "details" | "docs";
 type View =
-  | { kind: "tab"; tab: AppTab; task?: string; drawerTab?: DrawerTab }
+  | { kind: "tab"; tab: AppTab; task?: string; drawerTab?: DrawerTab; boardProject?: string }
   | { kind: "session"; sessionId: string };
 
 function pathForView(view: View): string {
@@ -17,11 +17,17 @@ function pathForView(view: View): string {
     // Drawer URL state (PRD §6.5): `?task=<folder>&tab=details|docs`, shareable
     // and restorable on a hard reload - the query string lives only on the
     // Kanban path, the other tabs' own URLs are untouched by this feature.
+    // `project` is the board's own visible filter (distinct from the
+    // drawer's `openTaskProject`, which is intentionally never in the URL
+    // per §6.5) - it round-trips the same way, alone or alongside task/tab.
+    const params = new URLSearchParams();
     if (view.task) {
-      const params = new URLSearchParams({ task: view.task, tab: view.drawerTab ?? "details" });
-      return `/kanban?${params.toString()}`;
+      params.set("task", view.task);
+      params.set("tab", view.drawerTab ?? "details");
     }
-    return "/kanban";
+    if (view.boardProject) params.set("project", view.boardProject);
+    const query = params.toString();
+    return query ? `/kanban?${query}` : "/kanban";
   }
   return "/";
 }
@@ -33,7 +39,8 @@ function parseView(pathname: string, search: string): View {
     const params = new URLSearchParams(search);
     const task = params.get("task") ?? undefined;
     const drawerTab: DrawerTab = params.get("tab") === "docs" ? "docs" : "details";
-    return { kind: "tab", tab: "kanban", task, drawerTab };
+    const boardProject = params.get("project") ?? undefined;
+    return { kind: "tab", tab: "kanban", task, drawerTab, boardProject };
   }
   return { kind: "tab", tab: pathname.startsWith("/sessions") ? "sessions" : "overview" };
 }
@@ -61,13 +68,20 @@ export function App() {
   const [drawerTab, setDrawerTab] = useState<DrawerTab>(
     initialView.kind === "tab" ? (initialView.drawerTab ?? "details") : "details",
   );
+  // The board's own visible project filter, part of the URL (`?project=`)
+  // unlike `openTaskProject` above - kept across tab switches (unlike
+  // `openTask`/`openTaskProject`, which reset) so returning to Kanban later
+  // restores the same filter.
+  const [boardProject, setBoardProject] = useState<string | undefined>(
+    initialView.kind === "tab" ? initialView.boardProject : undefined,
+  );
 
   function navigateToTab(tab: AppTab) {
     setActiveTabState(tab);
     setViewSessionId(null);
     setOpenTask(null);
     setOpenTaskProject(null);
-    const path = pathForView({ kind: "tab", tab });
+    const path = pathForView({ kind: "tab", tab, boardProject });
     if (path !== window.location.pathname) window.history.pushState(null, "", path);
   }
 
@@ -87,9 +101,24 @@ export function App() {
     setOpenTaskProject(project ?? null);
     setDrawerTab(tab);
     setActiveTabState("kanban");
-    const path = pathForView({ kind: "tab", tab: "kanban", task: task ?? undefined, drawerTab: tab });
+    const path = pathForView({ kind: "tab", tab: "kanban", task: task ?? undefined, drawerTab: tab, boardProject });
     const current = window.location.pathname + window.location.search;
     if (path !== current) window.history.pushState(null, "", path);
+  }
+
+  // A filter change isn't a back-button-worthy navigation event (same
+  // judgment Overview's own `updateSearchParams` makes for its identical
+  // `?project=` filter on a different path) - `replaceState`, not `pushState`.
+  function onBoardProjectChange(project: string | undefined) {
+    setBoardProject(project);
+    const path = pathForView({
+      kind: "tab",
+      tab: "kanban",
+      task: openTask ?? undefined,
+      drawerTab,
+      boardProject: project,
+    });
+    window.history.replaceState(null, "", path);
   }
 
   useEffect(() => {
@@ -122,6 +151,7 @@ export function App() {
         // resolves it instead, same as a hard reload.
         setOpenTaskProject(null);
         setDrawerTab(view.drawerTab ?? "details");
+        setBoardProject(view.boardProject);
       }
     }
     window.addEventListener("popstate", onPopState);
@@ -152,6 +182,8 @@ export function App() {
         openTaskProject={openTaskProject}
         drawerTab={drawerTab}
         onOpenTask={navigateToTask}
+        boardProject={boardProject}
+        onBoardProjectChange={onBoardProjectChange}
       />
     );
   }
