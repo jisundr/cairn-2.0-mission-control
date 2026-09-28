@@ -321,7 +321,7 @@ describe("Kanban", () => {
     expect(onBoardProjectChange).toHaveBeenCalledWith(undefined);
   });
 
-  it("pages a column's cards behind a manual See more control, and shows the end marker once exhausted", async () => {
+  it("pages a column's cards behind a manual See more control", async () => {
     const tasks = Array.from({ length: 25 }, (_, i) =>
       task({ folder: `docs/tasks/2026-09-01-0900-ready-${i}`, column: "planned" }),
     );
@@ -339,8 +339,7 @@ describe("Kanban", () => {
       expect(screen.getByTestId(`task-card-${t.folder}`)).toBeInTheDocument();
     }
     expect(screen.queryByTestId("kanban-see-more-planned")).not.toBeInTheDocument();
-    expect(screen.getByTestId("kanban-end-planned")).toHaveAttribute("aria-label", "Planned, end of list");
-    expect(screen.getByTestId("kanban-end-planned")).toBeEmptyDOMElement();
+    expect(screen.queryByRole("separator")).toBeNull();
   });
 
   it("resets a column's paging back to page 1 when the board's project filter changes, even after paging past the end (shown state is owned by Kanban itself, one level above the keyed kanban-columns subtree)", async () => {
@@ -366,7 +365,7 @@ describe("Kanban", () => {
     // end marker).
     await waitFor(() => expect(screen.getByTestId("kanban-see-more-planned")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("kanban-see-more-planned"));
-    await waitFor(() => expect(screen.getByTestId("kanban-end-planned")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("task-card-docs/tasks/2026-09-01-0900-project-a-ready-24")).toBeInTheDocument());
 
     rerenderKanban({ boardProject: "project-b" });
 
@@ -376,17 +375,18 @@ describe("Kanban", () => {
     await waitFor(() => expect(screen.getByTestId("kanban-see-more-planned")).toBeInTheDocument());
     expect(screen.getByTestId("task-card-docs/tasks/2026-09-01-0900-project-b-ready-0")).toBeInTheDocument();
     expect(screen.queryByTestId("task-card-docs/tasks/2026-09-01-0900-project-b-ready-24")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("kanban-end-planned")).not.toBeInTheDocument();
   });
 
-  it("shows the end marker on a column with no cards, without triggering the board's own all-empty state", async () => {
+  it("renders an empty column with no end marker, without triggering the board's own all-empty state", async () => {
     install([task({ folder: "docs/tasks/2026-09-01-0900-ready-one", column: "planned" })]);
     renderKanban();
 
-    await waitFor(() => expect(screen.getByTestId("kanban-end-done")).toBeInTheDocument());
-    expect(screen.getByTestId("kanban-end-done")).toHaveAttribute("aria-label", "Done, end of list");
-    expect(screen.getByTestId("kanban-end-done")).toBeEmptyDOMElement();
+    await waitFor(() => expect(screen.getByTestId("task-card-docs/tasks/2026-09-01-0900-ready-one")).toBeInTheDocument());
+    const doneCount = screen.getAllByText(/^\d+$/, { selector: ".kanban-column-count" }).at(-1);
+    expect(doneCount).toHaveTextContent("0");
+    expect(screen.queryByTestId("kanban-empty")).not.toBeInTheDocument();
     expect(screen.queryByTestId("kanban-see-more-done")).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator")).toBeNull();
   });
 
   it("shows skeleton cards in every column while the first tasks fetch is pending, then swaps them for the real board", async () => {
@@ -402,13 +402,12 @@ describe("Kanban", () => {
     });
     renderKanban();
 
-    await waitFor(() => expect(screen.getAllByTestId("kanban-skel")).toHaveLength(18));
+    await waitFor(() => expect(screen.getAllByTestId("kanban-skel")).toHaveLength(21));
     expect(screen.queryByTestId("kanban-empty")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("kanban-end-done")).not.toBeInTheDocument();
 
     release?.();
-    await waitFor(() => expect(screen.getByTestId("kanban-end-done")).toBeInTheDocument());
-    expect(screen.queryByTestId("kanban-skel")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("kanban-skel")).not.toBeInTheDocument());
+    expect(screen.getByTestId("task-card-docs/tasks/2026-09-28-1345-build-kanban-board")).toBeInTheDocument();
   });
 
   it("shows an error state with retry when /api/tasks fails", async () => {

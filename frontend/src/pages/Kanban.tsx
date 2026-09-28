@@ -160,7 +160,7 @@ export function Kanban({
                     onClick={(project, folder) => onOpenTask(folder, "details", project)}
                   />
                 ))}
-                {tasks.isPending ? null : grouped[col.key].length > shown[col.key] ? (
+                {!tasks.isPending && grouped[col.key].length > shown[col.key] && (
                   <button
                     className="btn-block"
                     onClick={() => setShown((prev) => ({ ...prev, [col.key]: prev[col.key] + PAGE_SIZE }))}
@@ -168,13 +168,6 @@ export function Kanban({
                   >
                     See more
                   </button>
-                ) : (
-                  <div
-                    className="kanban-column-end"
-                    role="separator"
-                    aria-label={`${col.title}, end of list`}
-                    data-testid={`kanban-end-${col.key}`}
-                  />
                 )}
               </div>
             </div>
