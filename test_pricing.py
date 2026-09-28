@@ -60,6 +60,24 @@ def test_call_cost_opus_5_5_computes_expected_dollar_amount():
     assert cost == pytest.approx(expected)
 
 
+def test_call_cost_sonnet_5_5_computes_expected_dollar_amount():
+    # claude-sonnet-5-5: $2.00/MTok input, $10.00/MTok output, $0.20/MTok
+    # cache_read, $2.50/MTok cache_write_5m, $4.00/MTok cache_write_1h.
+    row = make_call(
+        model="claude-sonnet-5-5",
+        input_tokens=1_000_000,
+        output_tokens=500_000,
+        cache_read_tokens=2_000_000,
+        cache_write_5m_tokens=1_000_000,
+        cache_write_1h_tokens=500_000,
+    )
+
+    cost = pricing.call_cost(row)
+
+    expected = (2.00 * 1) + (10.00 * 0.5) + (0.20 * 2) + (2.50 * 1) + (4.00 * 0.5)
+    assert cost == pytest.approx(expected)
+
+
 def test_call_cost_fable_5_1_computes_expected_dollar_amount():
     # claude-fable-5-1: $10.00/MTok input, $50.00/MTok output, $1.00/MTok
     # cache_read, $12.50/MTok cache_write_5m, $20.00/MTok cache_write_1h.
