@@ -1,12 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-// Goal 11 / Success criteria (PRD §6.7): the drawer is 3/4 viewport width on
-// desktop and full width at <=900px, "verified at both sizes" - jsdom
-// (vitest) never evaluates `design.css`'s media query at all, so nothing
-// but a real browser can catch a regression here (the same gap
-// layout-sanity.spec.ts's own icon-sizing checks exist to close). Opens the
-// drawer on seed.py's own fixture task folder, per-test viewport, and reads
-// its real rendered `boundingBox()` width.
+// Goal 11 / Success criteria (PRD §6.7): the task-detail overlay is a
+// centered modal, not a side drawer, and its content fills the modal's own
+// width at every viewport the old drawer supported - no dead space, no
+// horizontal scrollbar. jsdom (vitest) never evaluates `design.css`'s media
+// query or box-model math at all, so nothing but a real browser can catch a
+// regression here (the same gap layout-sanity.spec.ts's own icon-sizing
+// checks exist to close). Opens the drawer on seed.py's own fixture task
+// folder, per-test viewport, and reads the details tab's own scroll
+// dimensions.
 
 const FIXTURE_CARD = "task-card-docs/tasks/2026-01-01-0000-research-e2e-drawer-fixture";
 
@@ -18,23 +20,25 @@ async function openDrawer(page: import("@playwright/test").Page) {
   return drawer;
 }
 
-test("drawer is 3/4 viewport width on a 1280px desktop viewport", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  const drawer = await openDrawer(page);
+async function hasNoHorizontalOverflow(page: import("@playwright/test").Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const el = document.querySelector(".drawer-body");
+    if (!el) return false;
+    // A few px of tolerance for scrollbar/subpixel rounding, not a wrong rule.
+    return el.scrollWidth <= el.clientWidth + 1;
+  });
+}
 
-  const box = await drawer.boundingBox();
-  expect(box).not.toBeNull();
-  // A few px of tolerance for scrollbar/subpixel rounding, not a wrong rule.
-  expect(box!.width).toBeGreaterThan(1280 * 0.75 - 4);
-  expect(box!.width).toBeLessThan(1280 * 0.75 + 4);
+test("modal content has no horizontal overflow on a 1280px desktop viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openDrawer(page);
+
+  expect(await hasNoHorizontalOverflow(page)).toBe(true);
 });
 
-test("drawer is full viewport width at the <=900px breakpoint", async ({ page }) => {
+test("modal content has no horizontal overflow on a 700px narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 700, height: 800 });
-  const drawer = await openDrawer(page);
+  await openDrawer(page);
 
-  const box = await drawer.boundingBox();
-  expect(box).not.toBeNull();
-  expect(box!.width).toBeGreaterThan(700 - 4);
-  expect(box!.width).toBeLessThan(700 + 4);
+  expect(await hasNoHorizontalOverflow(page)).toBe(true);
 });

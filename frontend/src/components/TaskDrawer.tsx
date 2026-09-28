@@ -17,10 +17,10 @@ interface TaskDrawerProps {
 
 // TaskDrawer.tsx per `board-drawer-open.html`/`board-drawer-docs.html`/
 // `board-drawer-needs-attention.html` (PRD §6.5-§6.8, §10) - the app's first
-// overlay: a GitLab-issue-style panel (backdrop + slide-in body, sized by
-// `design.css`'s `.drawer`/900px-breakpoint rules alone, no JS viewport
-// check needed - same division of labor AppHeader's own F3 nav-collapse
-// already established). Two tabs, both always mounted once data loads;
+// overlay: a centered modal (backdrop + dialog body, sized by `design.css`'s
+// `.drawer` rule alone - a fluid width, no JS viewport check needed - same
+// division of labor AppHeader's own F3 nav-collapse already established).
+// Two tabs, both always mounted once data loads;
 // `tab`/`onTabChange` and `onClose` are controlled by the caller (Kanban.tsx)
 // so the open task/tab pair can live in the URL (§6.5's "URL state").
 export function TaskDrawer({ project, folder, tab, onClose, onTabChange, onOpenTask }: TaskDrawerProps) {

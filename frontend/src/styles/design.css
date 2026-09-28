@@ -469,13 +469,16 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .kcard-parent { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-bottom: 6px; align-self: flex-start; }
 .kcard-parent svg { width: 8px; height: 8px; stroke: currentColor; flex-shrink: 0; }
 
-/* ---- Task detail drawer: 3/4 width desktop, full width at the existing
-   900px breakpoint below (PRD §6.7) - a GitLab-issue-style overlay, the
-   app's first, built from the same flat/hairline/no-shadow vocabulary as
-   every other panel; the backdrop dim is a focus scrim, not a card
-   elevation effect, so it doesn't read as an exception to that rule. ---- */
+/* ---- Task detail modal: a centered dialog + backdrop (PRD §6.7), fluid
+   width so it fills the space the old 75%-wide side drawer used at desktop
+   sizes without leaving dead space or overflow at any narrower width. The
+   backdrop dim is a focus scrim, not a card elevation effect, so it doesn't
+   read as an exception to the app's flat/hairline/no-shadow vocabulary -
+   the dialog's own shadow below is the one deliberate exception to that
+   vocabulary, same rationale as the backdrop dim already gets: an overlay
+   floating above the page reads better with one than without. ---- */
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(30, 30, 30, 0.32); z-index: 20; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 75%; background: var(--panel); border-left: 1px solid var(--border); z-index: 21; display: flex; flex-direction: column; }
+.drawer { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 32px); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 16px 48px rgba(30, 30, 30, 0.24); z-index: 21; display: flex; flex-direction: column; overflow: hidden; }
 .drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 24px 14px; border-bottom: 1px solid var(--border); }
 .drawer-title { font-size: 16px; font-weight: 700; color: var(--ink); line-height: 1.3; margin-bottom: 7px; }
 .drawer-close { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--ink-soft); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
@@ -484,7 +487,7 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .drawer-tab { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); text-decoration: none; padding: 11px 0; border-bottom: 2px solid transparent; cursor: pointer; background: none; border-left: none; border-right: none; border-top: none; }
 .drawer-tab.active { color: var(--ink); border-bottom-color: var(--add-line); }
 .drawer-tab:hover:not(.active) { color: var(--ink); }
-.drawer-body { padding: 20px 24px; overflow: auto; flex-grow: 1; max-width: 680px; }
+.drawer-body { padding: 20px 24px; overflow: auto; flex-grow: 1; }
 /* Docs tab overrides the reading-width cap: a two-pane file browser wants
    the drawer's full 3/4 width, not a prose column. */
 .drawer-body.docs-tab { max-width: none; padding: 0; overflow: hidden; display: flex; }
@@ -574,8 +577,6 @@ table.detail .dt-val.mono { font-family: var(--mono); font-size: 12px; }
   nav.app-tabs { display: none; }
   .dropdown-btn.nav-dropdown { display: flex; }
   .kanban-columns { grid-template-columns: 1fr; }
-  .drawer { width: 100%; border-left: none; }
-  .drawer-body { max-width: none; }
   /* Docs tab: no room for a persistent sidebar, so it collapses into the
      same dropdown-btn/dropdown-menu InstallScopeRow already uses - not a
      second dropdown component - above a full-width main pane. */
