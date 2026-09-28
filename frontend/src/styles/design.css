@@ -370,8 +370,8 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .turn-origin { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
 .turn-origin.turn-origin-human { color: var(--ink-soft); font-weight: 700; }
 .bubble { max-width: 74%; padding: 11px 15px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; }
-.bubble.prompt { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
-.bubble.response { align-self: flex-end; background: var(--add-bg); border: 1px solid var(--border-soft); }
+.bubble.prompt { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 2px; }
+.bubble.response { align-self: flex-end; background: var(--add-bg); border: 1px solid var(--border-soft); border-bottom-right-radius: 2px; }
 .toolcall {
   align-self: center; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 6px;
   background: var(--panel-sunken); font-family: var(--mono); font-size: 10.5px;
