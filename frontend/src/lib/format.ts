@@ -30,17 +30,20 @@ export function formatDayLabel(dateStr: string): string {
   return `${month}-${day}`;
 }
 
-// Readable form of a "YYYY-MM-DD" calendar day, e.g. "Sep 28 (2026), Mon".
-// Parsed and formatted as a UTC calendar date (not local time) so the
-// displayed date always matches the literal input regardless of the
-// viewer's time zone - same UTC-day convention as Overview's
-// sessionOverlapsDate/eventOnDate day-boundary checks.
-export function formatDateLabel(dateStr: string): string {
+// Readable form of a "YYYY-MM-DD" calendar day, e.g. "Sep 28, Mon" for the
+// current year, or "Jan 5 2019, Sat" for a past/future year. Parsed and
+// formatted as a UTC calendar date (not local time) so the displayed date
+// always matches the literal input regardless of the viewer's time zone -
+// same UTC-day convention as Overview's sessionOverlapsDate/eventOnDate
+// day-boundary checks. `now` defaults to the real clock but is injectable
+// so "is this the current year" is testable without depending on it.
+export function formatDateLabel(dateStr: string, now: Date = new Date()): string {
   const [year, month, day] = dateStr.split("-").map(Number);
   const d = new Date(Date.UTC(year, month - 1, day));
   const monthName = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   const weekday = d.toLocaleString("en-US", { weekday: "short", timeZone: "UTC" });
-  return `${monthName} ${d.getUTCDate()} (${year}), ${weekday}`;
+  const yearPart = year === now.getUTCFullYear() ? "" : ` ${year}`;
+  return `${monthName} ${d.getUTCDate()}${yearPart}, ${weekday}`;
 }
 
 // Fallback label for a session with no saved title yet (parser.py found no
