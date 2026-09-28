@@ -95,7 +95,7 @@ export function Kanban({
   for (const t of tasks.data ?? []) grouped[t.column]?.push(t);
 
   return (
-    <div className="shell">
+    <div className="shell shell-board">
       <AppHeader
         activeTab={activeTab}
         onTabChange={onTabChange}
@@ -141,7 +141,7 @@ export function Kanban({
       ) : (
         <div className="kanban-columns" key={boardProject ?? "__all__"} aria-busy={tasks.isPending}>
           {COLUMNS.map((col) => (
-            <div key={col.key}>
+            <div key={col.key} className="kanban-column">
               <div className="kanban-column-head">
                 <span className="kanban-column-title">{col.title}</span>
                 {!tasks.isPending && <span className="kanban-column-count">{grouped[col.key].length}</span>}
