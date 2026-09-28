@@ -367,6 +367,8 @@ table.sessions a.sess:hover { text-decoration: underline; }
    between, via its padding-bottom) each turn. */
 .transcript { display: flex; flex-direction: column; gap: 14px; }
 .chat-turn { display: flex; flex-direction: column; gap: 14px; padding-bottom: 14px; }
+.turn-origin { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); }
+.turn-origin.turn-origin-human { color: var(--ink-soft); font-weight: 700; }
 .bubble { max-width: 74%; padding: 11px 15px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; }
 .bubble.prompt { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
 .bubble.response { align-self: flex-end; background: var(--add-bg); border: 1px solid var(--border-soft); }

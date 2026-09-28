@@ -125,6 +125,79 @@ describe("Drilldown", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
+  it("labels each turn with its raw agentName, distinguishing the human's own turn from a subagent's", async () => {
+    const MULTI_SESSION_ID = "multi-agent-session";
+    const trace: SessionTrace = {
+      session_id: MULTI_SESSION_ID,
+      started: "2026-09-25T11:58:00Z",
+      ended: "2026-09-25T12:39:00Z",
+      agents: [
+        {
+          agent: "main",
+          calls: 1,
+          tokens: 100,
+          cost: 1,
+          trace: [
+            {
+              position: 1,
+              global_position: 1,
+              request_id: "req-main-1",
+              timestamp: "2026-09-25T11:58:00Z",
+              model: "sonnet-5",
+              input_tokens: 10,
+              output_tokens: 10,
+              cache_read_tokens: 0,
+              cache_write_5m_tokens: 0,
+              cache_write_1h_tokens: 0,
+              cost: 1,
+              duration_seconds: 1,
+            },
+          ],
+        },
+        {
+          agent: "cairn:builder",
+          calls: 1,
+          tokens: 100,
+          cost: 1,
+          trace: [
+            {
+              position: 2,
+              global_position: 2,
+              request_id: "req-builder-2",
+              timestamp: "2026-09-25T11:59:00Z",
+              model: "sonnet-5",
+              input_tokens: 10,
+              output_tokens: 10,
+              cache_read_tokens: 0,
+              cache_write_5m_tokens: 0,
+              cache_write_1h_tokens: 0,
+              cost: 1,
+              duration_seconds: 1,
+            },
+          ],
+        },
+      ],
+    };
+
+    installFetchMock({
+      ...projectsHandlers(),
+      [`/api/session/${MULTI_SESSION_ID}/trace`]: () => envelope(trace),
+      [`/api/call/${MULTI_SESSION_ID}/1`]: () => envelope({ ...callDetail(1), agent: "main", request_id: "req-main-1", prompt: "dispatch the builder" }),
+      [`/api/call/${MULTI_SESSION_ID}/2`]: () => envelope({ ...callDetail(2), agent: "cairn:builder", request_id: "req-builder-2", prompt: "build the thing" }),
+    });
+
+    renderWithClient(<Drilldown sessionId={MULTI_SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
+
+    const humanOrigin = await screen.findByTestId(`turn-origin-${MULTI_SESSION_ID}-1`);
+    expect(humanOrigin).toHaveTextContent("main");
+    expect(humanOrigin).toHaveClass("turn-origin-human");
+
+    const subagentOrigin = await screen.findByTestId(`turn-origin-${MULTI_SESSION_ID}-2`);
+    expect(subagentOrigin).toHaveTextContent("cairn:builder");
+    expect(subagentOrigin).toHaveClass("turn-origin-agent");
+    expect(subagentOrigin).not.toHaveClass("turn-origin-human");
+  });
+
   // F4: the shared AppHeader (wordmark, tabs, connection dot, refresh) now
   // renders above .drill-header - previously this page had no shared chrome
   // at all.

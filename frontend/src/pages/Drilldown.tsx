@@ -320,6 +320,12 @@ function ChatTurn({ sessionId, turn }: { sessionId: string; turn: Turn }) {
 
   return (
     <div className="chat-turn" data-testid={`chat-turn-${sessionId}-${turn.firstGlobalPosition}`}>
+      <div
+        className={`turn-origin ${turn.agentName === "main" ? "turn-origin-human" : "turn-origin-agent"}`}
+        data-testid={`turn-origin-${sessionId}-${turn.firstGlobalPosition}`}
+      >
+        {turn.agentName}
+      </div>
       <div className="bubble prompt">{promptText}</div>
       {turn.calls.map((entry) =>
         (entry.detail?.available ? entry.detail.tool_calls : []).map((toolCall, i) => (
