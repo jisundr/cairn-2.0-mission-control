@@ -126,6 +126,17 @@ def test_last_log_date_is_none_when_no_dated_log_line_is_present():
     assert tasks._last_log_date(text) is None
 
 
+def test_last_log_datetime_parses_a_time_of_day_when_present():
+    text = "---\ngoal: g\n---\n- 2026-09-15 14:30: did the thing.\n"
+    assert tasks._last_log_datetime(text) == ("2026-09-15", "14:30")
+
+
+def test_last_log_datetime_returns_empty_time_for_a_date_only_line_and_last_log_date_is_unaffected():
+    text = "---\ngoal: g\n---\n- 2026-09-15: did the thing.\n"
+    assert tasks._last_log_datetime(text) == ("2026-09-15", "")
+    assert tasks._last_log_date(text) == "2026-09-15"
+
+
 # --------------------------------------------------------------------------
 # Activity-log parsing (§6.5)
 # --------------------------------------------------------------------------
@@ -162,6 +173,12 @@ def test_parse_activity_accepts_a_date_range_prefix_and_drops_a_stray_continuati
 
 def test_parse_activity_empty_when_there_is_no_body_after_frontmatter():
     assert tasks.parse_activity("---\ngoal: g\n---\n") == []
+
+
+def test_parse_activity_consumes_a_time_of_day_without_leaking_it_into_text():
+    text = "---\ngoal: g\n---\n- 2026-09-28 09:15: did X.\n"
+    entries = tasks.parse_activity(text)
+    assert entries == [{"date": "2026-09-28", "text": "did X."}]
 
 
 def test_parse_activity_against_this_repos_own_real_multi_entry_state_md():
@@ -419,6 +436,33 @@ def test_build_cards_omits_sub_tasks_field_for_a_folder_with_no_children(tmp_pat
 
     cards = tasks.build_cards([_Project("proj", root)])
     assert cards[0]["sub_tasks"] is None
+
+
+def test_build_cards_orders_most_recently_touched_first_using_same_day_times(tmp_path):
+    root = tmp_path / "proj"
+    write_state(root / "docs/tasks/2026-01-01-0000-build-earlier", body="- 2026-09-15 09:00: started.\n")
+    write_state(root / "docs/tasks/2026-01-02-0000-build-later", body="- 2026-09-15 14:30: continued.\n")
+
+    cards = tasks.build_cards([_Project("proj", root)])
+
+    assert [c["folder"] for c in cards] == [
+        "docs/tasks/2026-01-02-0000-build-later",
+        "docs/tasks/2026-01-01-0000-build-earlier",
+    ]
+    assert "_sort_key" not in cards[0]
+
+
+def test_build_cards_a_timed_touch_outranks_a_same_day_date_only_touch(tmp_path):
+    root = tmp_path / "proj"
+    write_state(root / "docs/tasks/2026-01-01-0000-build-no-time", body="- 2026-09-15: started.\n")
+    write_state(root / "docs/tasks/2026-01-02-0000-build-with-time", body="- 2026-09-15 00:01: continued.\n")
+
+    cards = tasks.build_cards([_Project("proj", root)])
+
+    assert [c["folder"] for c in cards] == [
+        "docs/tasks/2026-01-02-0000-build-with-time",
+        "docs/tasks/2026-01-01-0000-build-no-time",
+    ]
 
 
 def test_build_cards_handles_a_review_folder_with_only_a_draft_md(tmp_path):

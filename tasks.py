@@ -137,18 +137,39 @@ def parse_frontmatter(text: str) -> dict[str, str | list[str]]:
     return _parse_frontmatter_lines(lines[bounds[0] : bounds[1]])
 
 
-_LOG_DATE_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2})", re.MULTILINE)
+_LOG_DATE_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?", re.MULTILINE)
 
 
-def _last_log_date(text: str) -> str | None:
-    """The last `YYYY-MM-DD` date starting a `^- ` line in `text`'s body
+def _last_log_datetime(text: str) -> tuple[str, str] | None:
+    """The last `(date, time)` pair starting a `^- ` line in `text`'s body
     (after the frontmatter's closing `---`, or the whole text if there's no
-    frontmatter) - `None` if no such line is found."""
+    frontmatter) - `time` is `""` when that line carries no `HH:MM` suffix.
+    `None` if no dated line is found at all."""
     lines = text.splitlines()
     bounds = _frontmatter_bounds(lines)
     body_lines = lines[bounds[1] + 1 :] if bounds is not None else lines
-    dates = _LOG_DATE_RE.findall("\n".join(body_lines))
-    return dates[-1] if dates else None
+    matches = _LOG_DATE_RE.findall("\n".join(body_lines))
+    if not matches:
+        return None
+    date, time_of_day = matches[-1]
+    return date, time_of_day
+
+
+def _last_log_date(text: str) -> str | None:
+    """The last `YYYY-MM-DD` date starting a `^- ` line in `text`'s body -
+    `None` if no such line is found. A thin delegate to `_last_log_datetime`
+    that drops the time-of-day."""
+    result = _last_log_datetime(text)
+    return result[0] if result else None
+
+
+def _last_touched_sort_key(date: str, time: str) -> str:
+    """A fixed-width `YYYY-MM-DD HH:MM` string, lexicographically sortable -
+    `time` defaults to `"00:00"` (the earliest possible clock time for that
+    day) when absent, so a date-only touch is deliberately the most
+    conservative reading: it never outranks a same-day touch that did
+    record a time."""
+    return f"{date} {time or '00:00'}"
 
 
 def _draft_summary(text: str) -> tuple[str, str]:
@@ -163,7 +184,7 @@ def _draft_summary(text: str) -> tuple[str, str]:
     return goal, non_empty[-1]
 
 
-_ACTIVITY_START_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2}(?:/\d{2})?):?\s*")
+_ACTIVITY_START_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2}(?:/\d{2})?)(?: \d{2}:\d{2})?:?\s*")
 
 
 def parse_activity(text: str) -> list[dict]:
@@ -426,13 +447,18 @@ def _card_fields(
     if source_path.name == "DRAFT.md":
         goal, key_info = _draft_summary(text)
         last_log_date = _folder_name_date(folder_dir, tasks_root)
+        last_log_time = ""
     else:
         frontmatter = parse_frontmatter(text)
         goal = frontmatter.get("goal", "")
         key_info = frontmatter.get("key_info", "")
         goal = goal if isinstance(goal, str) else ""
         key_info = key_info if isinstance(key_info, str) else ""
-        last_log_date = _last_log_date(text) or _folder_name_date(folder_dir, tasks_root)
+        last_log_datetime = _last_log_datetime(text)
+        last_log_date = (last_log_datetime[0] if last_log_datetime else None) or _folder_name_date(
+            folder_dir, tasks_root
+        )
+        last_log_time = last_log_datetime[1] if last_log_datetime else ""
 
     needs_attention = _needs_attention_fact(key_info)
     done = _done_fact(kind, key_info, folder_dir.name, project.root, gh_cache, gh_ttl)
@@ -450,6 +476,7 @@ def _card_fields(
         "active": active,
         "needs_attention": needs_attention,
         "done": done,
+        "_sort_key": _last_touched_sort_key(last_log_date, last_log_time),
     }
 
 
@@ -495,6 +522,14 @@ def build_cards(
             card["sub_tasks"] = {"done": sum(1 for c in children if c["column"] == "done"), "total": len(children)}
         else:
             card["sub_tasks"] = None
+
+    # Most-recently-touched first, using the finer date+time precision
+    # `_last_touched_sort_key` computed per card - `_sort_key` is transient
+    # (leading underscore, matching this module's own private-helper
+    # naming) and never part of the `GET /api/tasks` response shape.
+    cards.sort(key=lambda c: c["_sort_key"], reverse=True)
+    for card in cards:
+        del card["_sort_key"]
 
     return cards
 
