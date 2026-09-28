@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useProjects, useSessions } from "../api/hooks";
 import type { RangeKey, SessionSummary } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
@@ -50,6 +50,50 @@ function sortSessions(rows: SessionSummary[], column: SortColumn, direction: Sor
   return [...rows].sort((a, b) => sign * (sortValue(a, column) - sortValue(b, column)));
 }
 
+// Round-trips range/project/sort/dir/page through `?range=&project=&sort=&
+// dir=&page=` query params - same hand-rolled window.location/history
+// convention Overview.tsx's own viewFromSearch/projectFromSearch/
+// updateSearchParams use for its in-page toggles, kept local to this page.
+// Anything missing or invalid falls back to today's defaults rather than
+// passing through and confusing sortSessions/pagination downstream.
+const RANGE_KEYS: RangeKey[] = ["today", "7d", "30d", "month", "6m", "life"];
+
+function rangeFromSearch(search: string): RangeKey {
+  const param = new URLSearchParams(search).get("range");
+  return RANGE_KEYS.includes(param as RangeKey) ? (param as RangeKey) : "7d";
+}
+
+function projectFromSearch(search: string): string | undefined {
+  return new URLSearchParams(search).get("project") ?? undefined;
+}
+
+function sortColumnFromSearch(search: string): SortColumn {
+  const param = new URLSearchParams(search).get("sort");
+  return SORT_COLUMNS.some((c) => c.value === param) ? (param as SortColumn) : "started";
+}
+
+function sortDirectionFromSearch(search: string): SortDirection {
+  return new URLSearchParams(search).get("dir") === "asc" ? "asc" : "desc";
+}
+
+function pageFromSearch(search: string): number {
+  const param = Number(new URLSearchParams(search).get("page"));
+  return Number.isInteger(param) && param > 0 ? param : 1;
+}
+
+// Shared write side for all five URL-persisted fields above - reads the
+// current URL fresh each call and only touches the key(s) passed in, so
+// e.g. changing the sort column never clobbers an already-set range or page.
+function updateSearchParams(updates: Record<string, string | undefined>) {
+  const params = new URLSearchParams(window.location.search);
+  for (const [key, value] of Object.entries(updates)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  const query = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+}
+
 // S2: Prev/Next only, no jump-to-page - a client-side slice of the
 // already-fully-fetched, already-sorted array (per PLAN.md's Risks note:
 // fine at this app's local single-user SQLite scale, would need revisiting
@@ -70,12 +114,12 @@ const PAGE_SIZE = 25;
 // change) and drops the redundant Project column on a single-project
 // install, where every row is already the same project.
 export function SessionsList({ activeTab, onTabChange, onSelectSession }: SessionsListProps) {
-  const [range, setRange] = useState<RangeKey>("7d");
-  const [projectFilter, setProjectFilter] = useState<string | undefined>(undefined);
-  const [sortColumn, setSortColumn] = useState<SortColumn>("started");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [range, setRange] = useState<RangeKey>(() => rangeFromSearch(window.location.search));
+  const [projectFilter, setProjectFilter] = useState<string | undefined>(() => projectFromSearch(window.location.search));
+  const [sortColumn, setSortColumn] = useState<SortColumn>(() => sortColumnFromSearch(window.location.search));
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() => sortDirectionFromSearch(window.location.search));
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => pageFromSearch(window.location.search));
 
   const projects = useProjects();
   const hostTag = projects.data?.hostname ?? "localhost";
@@ -86,9 +130,34 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
   const pageRows = sorted.slice(pageStart, pageStart + PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
 
+  // Skips its very first run - on mount, `page` already reflects whatever
+  // `?page=` was restored from the URL, and this effect's own dependencies
+  // (range/projectFilter/sortColumn/sortDirection) are always "new" on that
+  // first render too, which would otherwise immediately reset a restored
+  // deep-linked page straight back to 1 (same pitfall Overview.tsx's own
+  // selectedDate-reset comment calls out for its analogous case).
+  const isFirstRender = useRef(true);
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     setPage(1);
   }, [range, projectFilter, sortColumn, sortDirection]);
+
+  // Single sync point for all five URL-persisted fields - fires whenever
+  // any of them change (including the page-reset above, once it takes
+  // effect on the next render), so the URL's `page` param never drifts
+  // from what's actually showing.
+  useEffect(() => {
+    updateSearchParams({
+      range,
+      project: projectFilter,
+      sort: sortColumn,
+      dir: sortDirection,
+      page: String(page),
+    });
+  }, [range, projectFilter, sortColumn, sortDirection, page]);
 
   return (
     <div className="shell">

@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionSummary } from "../api/types";
 import { envelope, installFetchMock, serverError } from "../test/mockApi";
 import { renderWithClient } from "../test/renderWithClient";
@@ -43,6 +43,12 @@ function install(overrides: Record<string, ReturnType<typeof envelope> | { statu
 }
 
 describe("SessionsList", () => {
+  // A `?range=`/`?sort=`/etc. query param set by an earlier test in this
+  // file would otherwise leak into the next one's initial read.
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
   it("renders the sessions table and navigates to a drilldown on row click", async () => {
     install();
     const onSelectSession = vi.fn();
@@ -134,6 +140,24 @@ describe("SessionsList", () => {
     expect(rowOrder()).toEqual([`session-row-${OLDER_SESSION.session_id}`, `session-row-${SESSION.session_id}`]);
   });
 
+  // Regression for the dropdown-clip fix: `.sort-group`'s `overflow: hidden`
+  // used to clip `.dropdown-menu` out of view even though the toggle logic
+  // itself worked - assert the menu actually mounts/unmounts, not just the
+  // sort order it produces.
+  it("S1: clicking the sort control shows the dropdown menu, and picking an option closes it", async () => {
+    install({ "/api/rollup/session": envelope([SESSION, OLDER_SESSION]) });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(rowOrder()).toHaveLength(2));
+    expect(screen.queryByTestId("sort-menu")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("sort-select"));
+    expect(screen.getByTestId("sort-menu")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("sort-option-cost"));
+    expect(screen.queryByTestId("sort-menu")).not.toBeInTheDocument();
+  });
+
   it("S1: a column-header click sorts by that column, same as picking it from the dropdown", async () => {
     install({ "/api/rollup/session": envelope([SESSION, OLDER_SESSION]) });
     renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
@@ -148,5 +172,94 @@ describe("SessionsList", () => {
     fireEvent.click(screen.getByTestId("sort-select"));
     fireEvent.click(screen.getByTestId("sort-option-cost"));
     expect(rowOrder()).toEqual([`session-row-${SESSION.session_id}`, `session-row-${OLDER_SESSION.session_id}`]);
+  });
+
+  // URL state: range/project/sort/dir/page all round-trip through query
+  // params, mirroring Overview.tsx's own view/project/date convention.
+  it("loads with ?range=30d&project=wardstone&sort=cost&dir=asc in the URL and restores all four", async () => {
+    window.history.pushState(null, "", "/?range=30d&project=wardstone&sort=cost&dir=asc");
+    let capturedRange: string | null = null;
+    installFetchMock({
+      "/api/projects": () =>
+        envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "cairn-2.0", parent: null },
+            { label: "wardstone", parent: null },
+          ],
+        }),
+      "/api/rollup/session": (params) => {
+        capturedRange = params.get("range");
+        return envelope([SESSION, OLDER_SESSION]);
+      },
+    });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(rowOrder()).toHaveLength(2));
+    expect(capturedRange).toBe("30d");
+    expect(screen.getByTestId("range-seg-30d").className).toContain("active");
+    expect(screen.getByTestId("install-scope-chip")).toHaveTextContent("Project: wardstone");
+    // Cost ascending - OLDER_SESSION ($1.00) sorts before SESSION ($12.40).
+    expect(rowOrder()).toEqual([`session-row-${OLDER_SESSION.session_id}`, `session-row-${SESSION.session_id}`]);
+  });
+
+  it("loads with ?page=2 and restores that page, without a stray Prev/Next click", async () => {
+    const sessions: SessionSummary[] = Array.from({ length: 30 }, (_, i) => ({
+      ...SESSION,
+      session_id: `session-${i}`,
+      started: new Date(Date.UTC(2026, 8, 25 - i)).toISOString(),
+      ended: new Date(Date.UTC(2026, 8, 25 - i, 0, 30)).toISOString(),
+    }));
+    window.history.pushState(null, "", "/?page=2");
+    install({ "/api/rollup/session": envelope(sessions) });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("pagination-count")).toHaveTextContent("Showing 26–30 of 30"));
+    expect(screen.getByTestId("pagination-next")).toBeDisabled();
+  });
+
+  it("changing the sort direction updates the URL's dir param without clobbering range/project", async () => {
+    window.history.pushState(null, "", "/?range=30d&project=wardstone");
+    installFetchMock({
+      "/api/projects": () =>
+        envelope({
+          hostname: "test-host",
+          projects: [
+            { label: "cairn-2.0", parent: null },
+            { label: "wardstone", parent: null },
+          ],
+        }),
+      "/api/rollup/session": () => envelope([SESSION, OLDER_SESSION]),
+    });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(rowOrder()).toHaveLength(2));
+    expect(new URLSearchParams(window.location.search).get("dir")).toBe("desc");
+
+    fireEvent.click(screen.getByTestId("sort-direction"));
+
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("dir")).toBe("asc"));
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("range")).toBe("30d");
+    expect(params.get("project")).toBe("wardstone");
+  });
+
+  it("changing the range resets the page URL param to 1", async () => {
+    const sessions: SessionSummary[] = Array.from({ length: 30 }, (_, i) => ({
+      ...SESSION,
+      session_id: `session-${i}`,
+      started: new Date(Date.UTC(2026, 8, 25 - i)).toISOString(),
+      ended: new Date(Date.UTC(2026, 8, 25 - i, 0, 30)).toISOString(),
+    }));
+    window.history.pushState(null, "", "/?page=2");
+    install({ "/api/rollup/session": envelope(sessions) });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("pagination-count")).toHaveTextContent("Showing 26–30 of 30"));
+
+    fireEvent.click(screen.getByTestId("range-seg-life"));
+
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("page")).toBe("1"));
+    expect(new URLSearchParams(window.location.search).get("range")).toBe("life");
   });
 });

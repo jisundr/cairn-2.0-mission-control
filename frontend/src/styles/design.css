@@ -149,7 +149,7 @@ nav.app-tabs a:hover:not(.active) { color: var(--ink); }
 /* Overview's 4 stat cards (.stats/.stat/.stat-label/.stat-value) are gone
    as of O1 - StatCard.tsx (their only consumer) was deleted with them, per
    PLAN.md's "Remove: 4 stat cards". */
-.info-dot { display: inline-flex; color: var(--ink-faint); cursor: default; }
+.info-dot { display: inline-flex; color: var(--ink-faint); cursor: default; margin-left: 5px; vertical-align: middle; }
 .info-dot svg { width: 14px; height: 14px; }
 
 /* ---- grid / panel ---- */
@@ -306,14 +306,21 @@ table.sessions a.sess { color: var(--add); text-decoration: none; font-weight: 6
 table.sessions a.sess:hover { text-decoration: underline; }
 
 /* ---- Sessions List (S1/S2): sort control group + pagination ---- */
-.sort-group { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--panel); }
+/* No `overflow: hidden` here (dropped from a live-review fix) - it kept
+   this pill's rounded corners seamless, but also clipped `.dropdown-menu`
+   entirely, since that's `position: absolute` inside `.sort-select`, a
+   descendant of this container. The two children now carry their own
+   matching corner radii instead, so the pill still reads as one shape. */
+.sort-group { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
 .sort-group .sort-select {
   position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 10px; font-family: var(--sans);
   font-size: 12.5px; font-weight: 600; color: var(--ink); border-right: 1px solid var(--border); cursor: pointer;
+  border-radius: 6px 0 0 6px;
 }
 .sort-group .sort-select svg { width: 10px; height: 10px; stroke: var(--ink-faint); }
 .sort-group .sort-dir {
   display: flex; align-items: center; padding: 6px 8px; background: none; border: none; cursor: pointer; color: var(--ink-soft);
+  border-radius: 0 6px 6px 0;
 }
 .sort-group .sort-dir:hover { color: var(--ink); background: var(--panel-sunken); }
 .sort-group .sort-dir svg { width: 13px; height: 13px; }
