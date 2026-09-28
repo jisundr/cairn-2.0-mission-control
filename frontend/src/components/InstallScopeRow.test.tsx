@@ -63,7 +63,7 @@ describe("InstallScopeRow", () => {
     );
 
     const chip = screen.getByTestId("install-scope-date-chip");
-    expect(chip).toHaveTextContent("Date: 2026-09-25");
+    expect(chip).toHaveTextContent("Date: Sep 25 (2026), Fri");
     fireEvent.click(chip.querySelector(".clear")!);
     expect(onClearDate).toHaveBeenCalled();
   });

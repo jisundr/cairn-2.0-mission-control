@@ -30,6 +30,19 @@ export function formatDayLabel(dateStr: string): string {
   return `${month}-${day}`;
 }
 
+// Readable form of a "YYYY-MM-DD" calendar day, e.g. "Sep 28 (2026), Mon".
+// Parsed and formatted as a UTC calendar date (not local time) so the
+// displayed date always matches the literal input regardless of the
+// viewer's time zone - same UTC-day convention as Overview's
+// sessionOverlapsDate/eventOnDate day-boundary checks.
+export function formatDateLabel(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  const monthName = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const weekday = d.toLocaleString("en-US", { weekday: "short", timeZone: "UTC" });
+  return `${monthName} ${d.getUTCDate()} (${year}), ${weekday}`;
+}
+
 // Fallback label for a session with no saved title yet (parser.py found no
 // "ai-title" record) - first 8 chars of the session's full UUID, matching
 // the mockup's `a8de42…c884`-style short id.

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ProjectSummary } from "../api/types";
+import { formatDateLabel } from "../lib/format";
 
 interface InstallScopeRowProps {
   projects: ProjectSummary[];
@@ -88,7 +89,7 @@ export function InstallScopeRow({
         )}
         {selectedDate && onClearDate && (
           <span className="filter-chip" data-testid="install-scope-date-chip">
-            Date: {selectedDate}
+            Date: {formatDateLabel(selectedDate)}
             <span className="clear" title="Clear selected day" onClick={onClearDate}>
               <svg viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round">
                 <line x1="6" y1="6" x2="18" y2="18" />

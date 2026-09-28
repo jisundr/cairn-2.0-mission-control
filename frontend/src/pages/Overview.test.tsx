@@ -286,7 +286,7 @@ describe("Overview", () => {
 
     expect(await screen.findByTestId("contribution-calendar")).toBeInTheDocument();
     expect(screen.getByTestId("install-scope-chip")).toHaveTextContent("Project: wardstone");
-    expect(screen.getByTestId("install-scope-date-chip")).toHaveTextContent("Date: 2026-09-25");
+    expect(screen.getByTestId("install-scope-date-chip")).toHaveTextContent("Date: Sep 25 (2026), Fri");
     // Restored `date` drills the Breakdown into day-detail's own seeded
     // total ($12.40) rather than the range rollup's ($41.10).
     await waitFor(() => expect(screen.getByTestId("breakdown-cost")).toHaveTextContent("$12.40"));

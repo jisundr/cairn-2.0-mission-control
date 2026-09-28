@@ -22,7 +22,7 @@ import { StateCard } from "../components/StateCard";
 import { AlertTriangleIcon, InboxIcon, RefreshIcon } from "../components/icons";
 import { TokensPerDayChart } from "../components/TokensPerDayChart";
 import { WarningBanner } from "../components/WarningBanner";
-import { formatCost, formatRelativeToNow, formatTokens } from "../lib/format";
+import { formatCost, formatDateLabel, formatRelativeToNow, formatTokens } from "../lib/format";
 import { cn } from "../lib/utils";
 
 // A view's own fixed window, not a user-facing range option - Trend keeps
@@ -285,7 +285,7 @@ function OverviewLoaded({
   // Selected day, else the active view's fixed window - Breakdown and every
   // By-panel below share this same label (was two separately-computed but
   // identical expressions; collapsed to one).
-  const panelLabel = selectedDate ? selectedDate : VIEW_LABEL[view];
+  const panelLabel = selectedDate ? formatDateLabel(selectedDate) : VIEW_LABEL[view];
 
   // O3: By models/tools/agents - aggregate (the active range's own rollup)
   // vs. day-selected (B2's day_detail() breakdown), same source split

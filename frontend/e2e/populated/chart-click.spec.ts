@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { formatDateLabel } from "../../src/lib/format";
 
 // Regression coverage for a real click-through bug: TokensPerDayChart's
 // visible segments render `height: Math.max(height, 0)` - a zero-token
@@ -23,6 +24,6 @@ test("a zero-token day (the range's oldest bar) is still clickable", async ({ pa
   // Breakdown switches from the range-wide "Last 30 days" label to the
   // clicked day's own date - the click reached the day, not nothing.
   const date = await oldest.getAttribute("data-testid").then((t) => t!.replace("chart-bar-", ""));
-  await expect(page.getByTestId("install-scope-date-chip")).toContainText(date);
+  await expect(page.getByTestId("install-scope-date-chip")).toContainText(formatDateLabel(date));
   await expect(page.getByTestId("breakdown-sessions")).toContainText("0");
 });
