@@ -42,6 +42,42 @@ def test_call_cost_known_model_computes_expected_dollar_amount():
     assert cost == pytest.approx(expected)
 
 
+def test_call_cost_opus_5_5_computes_expected_dollar_amount():
+    # claude-opus-5-5: $4.00/MTok input, $20.00/MTok output, $0.20/MTok
+    # cache_read, $5.00/MTok cache_write_5m, $8.00/MTok cache_write_1h.
+    row = make_call(
+        model="claude-opus-5-5",
+        input_tokens=1_000_000,
+        output_tokens=500_000,
+        cache_read_tokens=2_000_000,
+        cache_write_5m_tokens=1_000_000,
+        cache_write_1h_tokens=500_000,
+    )
+
+    cost = pricing.call_cost(row)
+
+    expected = (4.00 * 1) + (20.00 * 0.5) + (0.20 * 2) + (5.00 * 1) + (8.00 * 0.5)
+    assert cost == pytest.approx(expected)
+
+
+def test_call_cost_fable_5_1_computes_expected_dollar_amount():
+    # claude-fable-5-1: $10.00/MTok input, $50.00/MTok output, $1.00/MTok
+    # cache_read, $12.50/MTok cache_write_5m, $20.00/MTok cache_write_1h.
+    row = make_call(
+        model="claude-fable-5-1",
+        input_tokens=1_000_000,
+        output_tokens=500_000,
+        cache_read_tokens=2_000_000,
+        cache_write_5m_tokens=1_000_000,
+        cache_write_1h_tokens=500_000,
+    )
+
+    cost = pricing.call_cost(row)
+
+    expected = (10.00 * 1) + (50.00 * 0.5) + (1.00 * 2) + (12.50 * 1) + (20.00 * 0.5)
+    assert cost == pytest.approx(expected)
+
+
 def test_call_cost_unknown_model_returns_unknown():
     row = make_call(model="claude-nonexistent-9000")
 
