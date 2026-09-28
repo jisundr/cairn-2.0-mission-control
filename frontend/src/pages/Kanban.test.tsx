@@ -329,7 +329,8 @@ describe("Kanban", () => {
       expect(screen.getByTestId(`task-card-${t.folder}`)).toBeInTheDocument();
     }
     expect(screen.queryByTestId("kanban-see-more-planned")).not.toBeInTheDocument();
-    expect(screen.getByTestId("kanban-end-planned")).toHaveTextContent("End of Planned");
+    expect(screen.getByTestId("kanban-end-planned")).toHaveAttribute("aria-label", "Planned, end of list");
+    expect(screen.getByTestId("kanban-end-planned")).toBeEmptyDOMElement();
   });
 
   it("resets a column's paging back to page 1 when the board's project filter changes, even after paging past the end (shown state is owned by Kanban itself, one level above the keyed kanban-columns subtree)", async () => {
@@ -373,7 +374,8 @@ describe("Kanban", () => {
     renderKanban();
 
     await waitFor(() => expect(screen.getByTestId("kanban-end-done")).toBeInTheDocument());
-    expect(screen.getByTestId("kanban-end-done")).toHaveTextContent("End of Done");
+    expect(screen.getByTestId("kanban-end-done")).toHaveAttribute("aria-label", "Done, end of list");
+    expect(screen.getByTestId("kanban-end-done")).toBeEmptyDOMElement();
     expect(screen.queryByTestId("kanban-see-more-done")).not.toBeInTheDocument();
   });
 

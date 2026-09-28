@@ -168,9 +168,12 @@ export function Kanban({
                     See more
                   </button>
                 ) : (
-                  <div className="kanban-column-end" data-testid={`kanban-end-${col.key}`}>
-                    End of {col.title}
-                  </div>
+                  <div
+                    className="kanban-column-end"
+                    role="separator"
+                    aria-label={`${col.title}, end of list`}
+                    data-testid={`kanban-end-${col.key}`}
+                  />
                 )}
               </div>
             </div>
