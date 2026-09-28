@@ -496,19 +496,24 @@ table.sessions a.sess:hover { text-decoration: underline; }
 .drawer-tab:hover:not(.active) { color: var(--ink); }
 .drawer-body { padding: 20px 24px; overflow: auto; flex-grow: 1; }
 /* Docs tab overrides the reading-width cap: a two-pane file browser wants
-   the drawer's full 3/4 width, not a prose column. */
+   the modal's full width, not a prose column. */
 .drawer-body.docs-tab { max-width: none; padding: 0; overflow: hidden; display: flex; }
 .drawer-section { margin-bottom: 22px; }
 .drawer-section-title { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 8px; }
 
-/* Reply composer (PRD §6.8) - Needs Attention cards only. No backend, no
-   send: --remove-accented like every other Needs Attention surface, a plain
-   textarea, and a Copy button. The caption is load-bearing, not decoration -
-   researched explicitly that no supported way exists to send this anywhere,
-   so the UI states that limit plainly rather than implying otherwise. */
+/* Prompt composer (PRD §6.8) - needs_attention and ready cards. No backend,
+   no send: a pre-filled, editable textarea and a Copy button. The caption is
+   load-bearing, not decoration - researched explicitly that no supported way
+   exists to send this anywhere, so the UI states that limit plainly rather
+   than implying otherwise. needs_attention keeps the --remove-accented
+   treatment every other Needs Attention surface uses; the `.start` modifier
+   (ready cards) uses a neutral border/heading color instead - nothing here
+   needs the alarming tone. */
 .reply-composer { border: 1px solid var(--remove); border-radius: 8px; padding: 14px 16px; margin-bottom: 22px; background: var(--panel); }
+.reply-composer.start { border-color: var(--border); }
 .reply-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .reply-title { font-size: 12.5px; font-weight: 700; color: var(--remove); }
+.reply-composer.start .reply-title { color: var(--ink); }
 .reply-reason { font-size: 12px; color: var(--ink-soft); margin-bottom: 10px; }
 .reply-textarea { width: 100%; min-height: 72px; resize: vertical; font-family: var(--sans); font-size: 12.5px; line-height: 1.5; color: var(--ink); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 9px 11px; box-sizing: border-box; }
 .reply-textarea:focus-visible { outline: 2px solid var(--add-line); outline-offset: 1px; }

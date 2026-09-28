@@ -129,23 +129,64 @@ function ColumnBadge({ column }: { column: TaskColumn }) {
   return <span className="kcard-kind">{COLUMN_LABEL[column]}</span>;
 }
 
-// Reply composer (§6.8) - Needs Attention cards only, rendered above the
-// frontmatter table. Uncontrolled textarea (a ref, not state): the "Copy"
-// button just needs the field's current value at click time, and nothing
-// else in this component (or anywhere else - §6.8's whole point) ever reads
-// or sends it, so there's no reason to re-render on every keystroke.
-function ReplyComposer({ keyInfo }: { keyInfo: string }) {
+// A paste-ready prompt for handing this task to a fresh session: a "resume"
+// framing built around key_info (what's blocking/current state) for
+// needs_attention, a "start" framing built around goal/done_when for ready -
+// the two columns PromptComposer renders for. Wording/format are a
+// build-time call (REQUIREMENTS.md Constraints); the fixed contract is just
+// that it's non-empty whenever the relevant frontmatter fields exist and
+// always names the project/folder so a fresh session knows where to look.
+function buildPrompt(data: TaskDetail): string {
+  const fm = data.frontmatter;
+  const location = `Task: ${data.project} — ${data.folder}`;
+  const doc = fm.path ? `Requirements doc: ${fm.path}` : null;
+
+  if (data.column === "needs_attention") {
+    return [
+      `Resume this task.`,
+      location,
+      doc,
+      fm.goal ? `Goal: ${fm.goal}` : null,
+      `What's blocking it: ${fm.key_info ?? "(no key_info recorded)"}`,
+    ]
+      .filter((line): line is string => line !== null)
+      .join("\n");
+  }
+
+  return [
+    `Start this task.`,
+    location,
+    doc,
+    fm.goal ? `Goal: ${fm.goal}` : null,
+    fm.done_when ? `Done when: ${fm.done_when}` : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+// Prompt composer (§6.8) - needs_attention (a "resume" framing) and ready (a
+// "start" framing) cards, rendered above the frontmatter table. Uncontrolled
+// textarea (a ref, not state): the "Copy" button just needs the field's
+// current value at click time, and nothing else in this component (or
+// anywhere else - §6.8's whole point) ever reads or sends it, so there's no
+// reason to re-render on every keystroke; the generated prompt above is only
+// the field's initial value, still fully editable.
+function PromptComposer({ data }: { data: TaskDetail }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [copied, setCopied] = useState(false);
+  const isAttention = data.column === "needs_attention";
 
   return (
-    <div className="reply-composer" data-testid="reply-composer">
+    <div className={isAttention ? "reply-composer" : "reply-composer start"} data-testid="reply-composer">
       <div className="reply-head">
-        <span className="kcard-attn">needs attention</span>
-        <span className="reply-title">Needs your attention</span>
+        <span className="reply-title">{isAttention ? "Needs your attention" : "Ready to start"}</span>
       </div>
-      <div className="reply-reason">key_info: &quot;{keyInfo}&quot;</div>
-      <textarea ref={textareaRef} className="reply-textarea" placeholder="Draft a reply…" data-testid="reply-textarea" />
+      <div className="reply-reason">
+        {isAttention
+          ? `key_info: "${data.frontmatter.key_info ?? ""}"`
+          : `goal: "${data.frontmatter.goal ?? ""}"`}
+      </div>
+      <textarea ref={textareaRef} className="reply-textarea" defaultValue={buildPrompt(data)} data-testid="reply-textarea" />
       <div className="reply-actions">
         <button
           type="button"
@@ -191,7 +232,7 @@ function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (proje
 
   return (
     <>
-      {data.column === "needs_attention" && <ReplyComposer keyInfo={fm.key_info ?? ""} />}
+      {(data.column === "needs_attention" || data.column === "ready") && <PromptComposer data={data} />}
 
       <div className="drawer-section">
         <div className="drawer-section-title">Details</div>

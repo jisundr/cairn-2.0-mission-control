@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityEntry, TaskDetail, TaskDoc } from "../api/types";
 import { envelope, installFetchMock } from "../test/mockApi";
@@ -150,11 +150,17 @@ describe("TaskDrawer", () => {
     await waitFor(() => expect(screen.getByTestId("docs-empty")).toBeInTheDocument());
   });
 
-  it("shows the reply composer only on a needs_attention card, and it makes zero network requests when used", async () => {
-    const fetchMock = renderDrawer(detail({ column: "needs_attention", frontmatter: { key_info: "needs-human: pick a direction" } }));
+  it("shows the prompt composer on a needs_attention card, pre-filled from key_info, and it makes zero network requests when used", async () => {
+    const fetchMock = renderDrawer(
+      detail({ column: "needs_attention", frontmatter: { key_info: "needs-human: pick a direction" } }),
+    );
 
     await waitFor(() => expect(screen.getByTestId("reply-composer")).toBeInTheDocument());
     expect(screen.getByText('key_info: "needs-human: pick a direction"')).toBeInTheDocument();
+    expect((screen.getByTestId("reply-textarea") as HTMLTextAreaElement).value).toContain(
+      "needs-human: pick a direction",
+    );
+    expect(within(screen.getByTestId("reply-composer")).queryByText(/needs attention/i)).not.toBeInTheDocument();
 
     const callsBefore = fetchMock.mock.calls.length;
     fireEvent.change(screen.getByTestId("reply-textarea"), { target: { value: "Go with option A." } });
@@ -164,8 +170,23 @@ describe("TaskDrawer", () => {
     expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 
-  it("never renders the reply composer on a non-needs_attention card", async () => {
-    renderDrawer(detail({ column: "ready" }));
+  it("shows the prompt composer on a ready card too, pre-filled from goal/done_when", async () => {
+    renderDrawer(
+      detail({
+        column: "ready",
+        frontmatter: { goal: "Ship the kanban board.", done_when: "All four columns render live data." },
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByTestId("reply-composer")).toBeInTheDocument());
+    const textarea = screen.getByTestId("reply-textarea") as HTMLTextAreaElement;
+    expect(textarea.value).toContain("Ship the kanban board.");
+    expect(textarea.value).toContain("All four columns render live data.");
+    expect(within(screen.getByTestId("reply-composer")).queryByText(/needs attention/i)).not.toBeInTheDocument();
+  });
+
+  it("never renders the prompt composer on a card that's neither ready nor needs_attention", async () => {
+    renderDrawer(detail({ column: "ongoing" }));
 
     await waitFor(() => expect(screen.getByText("Ship the kanban board.")).toBeInTheDocument());
     expect(screen.queryByTestId("reply-composer")).not.toBeInTheDocument();
