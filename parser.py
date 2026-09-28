@@ -99,12 +99,14 @@ def build_agent_map(main_entries: list[dict]) -> dict[str, str]:
 def parse_transcript(entries: list[dict], *, session_id: str, agent: str, conn) -> None:
     for entry in entries:
         if entry.get("isApiErrorMessage") is True:
-            db.insert_usage_limit_event(
-                conn,
-                session_id=session_id,
-                timestamp=entry.get("timestamp"),
-                raw_entry=json.dumps(entry),
-            )
+            error_message = entry.get("message")
+            if isinstance(error_message, str) and error_message.startswith("Claude usage limit reached"):
+                db.insert_usage_limit_event(
+                    conn,
+                    session_id=session_id,
+                    timestamp=entry.get("timestamp"),
+                    raw_entry=json.dumps(entry),
+                )
             continue
 
         message = entry.get("message")

@@ -176,12 +176,16 @@ def test_parse_session_dedupes_duplicate_tool_use_id(tmp_path):
     assert rows[0][0] == "Read"
 
 
-def test_isapi_error_message_routes_to_usage_limit_events(tmp_path):
+def test_genuine_usage_limit_string_message_routes_to_usage_limit_events(tmp_path):
     cairn_dir = tmp_path / ".cairn"
     transcript_path = tmp_path / "session.jsonl"
 
     write_jsonl(transcript_path, [
-        {"isApiErrorMessage": True, "timestamp": "2026-08-28T00:00:00Z"},
+        {
+            "isApiErrorMessage": True,
+            "timestamp": "2026-08-28T00:00:00Z",
+            "message": "Claude usage limit reached|1735689600",
+        },
     ])
 
     parser.parse_session(cairn_dir, transcript_path, "sess-1")
@@ -191,6 +195,32 @@ def test_isapi_error_message_routes_to_usage_limit_events(tmp_path):
     events = conn.execute("SELECT session_id FROM usage_limit_events").fetchall()
     assert calls == 0
     assert events == [("sess-1",)]
+
+
+def test_generic_api_error_message_does_not_route_to_usage_limit_events(tmp_path):
+    cairn_dir = tmp_path / ".cairn"
+    transcript_path = tmp_path / "session.jsonl"
+
+    write_jsonl(transcript_path, [
+        {
+            "isApiErrorMessage": True,
+            "timestamp": "2026-08-28T00:00:00Z",
+            "message": {
+                "model": "<synthetic>",
+                "role": "assistant",
+                "content": [{"type": "text", "text": "error occurred"}],
+            },
+            "error": "server_error",
+        },
+    ])
+
+    parser.parse_session(cairn_dir, transcript_path, "sess-1")
+
+    conn = db.connect(cairn_dir)
+    calls = conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0]
+    events = conn.execute("SELECT session_id FROM usage_limit_events").fetchall()
+    assert calls == 0
+    assert events == []
 
 
 def test_malformed_json_line_does_not_block_surrounding_entries(tmp_path):
