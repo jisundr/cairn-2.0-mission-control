@@ -17,7 +17,7 @@ function detail(overrides: Partial<TaskDetail> = {}): TaskDetail {
     active: false,
     needs_attention: false,
     frontmatter: { goal: "Ship the kanban board.", key_info: "in progress" },
-    activity: [{ date: "2026-09-01", text: "started." }],
+    activity: [{ date: "2026-09-01", time: null, text: "started." }],
     draft_content: null,
     sub_tasks: null,
     docs: [],
@@ -58,9 +58,9 @@ describe("TaskDrawer", () => {
 
   it("splits a real multi-entry activity log into individual dated timeline items", async () => {
     const activity: ActivityEntry[] = [
-      { date: "2026-09-27", text: "Wrote the PRD and reviewed it with the user." },
-      { date: "2026-09-28", text: "Built wireframes for the drawer, reusing v1's own CSS vocabulary." },
-      { date: "2026-09-28/29", text: "Ran a long round of live observation-based tweaks against the built app." },
+      { date: "2026-09-27", time: null, text: "Wrote the PRD and reviewed it with the user." },
+      { date: "2026-09-28", time: null, text: "Built wireframes for the drawer, reusing v1's own CSS vocabulary." },
+      { date: "2026-09-28/29", time: null, text: "Ran a long round of live observation-based tweaks against the built app." },
     ];
     renderDrawer(detail({ activity }));
 
@@ -69,6 +69,18 @@ describe("TaskDrawer", () => {
     expect(screen.getByText(activity[2].text)).toBeInTheDocument();
     expect(screen.getByText("2026-09-28/29")).toBeInTheDocument();
     expect(document.querySelectorAll(".timeline-item")).toHaveLength(3);
+  });
+
+  it("shows an entry's time next to its date, and the date alone when it has no time", async () => {
+    const activity: ActivityEntry[] = [
+      { date: "2026-09-29", time: "21:39", text: "Sub-task folder created." },
+      { date: "2026-09-23", time: null, text: "Older bare-dated entry." },
+    ];
+    renderDrawer(detail({ activity }));
+
+    await waitFor(() => expect(screen.getByText(activity[0].text)).toBeInTheDocument());
+    const dates = Array.from(document.querySelectorAll(".timeline-date")).map((el) => el.textContent);
+    expect(dates).toEqual(["2026-09-29 21:39", "2026-09-23"]);
   });
 
   it("renders draft_content instead of a timeline for a review (DRAFT.md-only) folder", async () => {

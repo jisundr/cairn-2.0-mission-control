@@ -196,6 +196,8 @@ export interface TaskFrontmatter {
 
 export interface ActivityEntry {
   date: string;
+  // The log line's HH:MM (UTC), or null when the line has no time.
+  time: string | null;
   text: string;
 }
 
