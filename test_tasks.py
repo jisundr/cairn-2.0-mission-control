@@ -373,20 +373,43 @@ def test_column_precedence_across_the_seven_stages():
 # --------------------------------------------------------------------------
 
 
-def test_active_heartbeats_includes_only_fresh_files_matching_project_and_task(tmp_path):
+def test_active_heartbeats_counts_a_marker_and_expires_one_past_the_ceiling(tmp_path):
     heartbeat_dir = tmp_path / "active"
     heartbeat_dir.mkdir()
     now = time.time()
 
-    fresh = heartbeat_dir / "sess-fresh.json"
+    fresh = heartbeat_dir / "sess--agent1.active"
     fresh.write_text('{"project": "/repo", "task": "docs/tasks/x"}')
-    stale = heartbeat_dir / "sess-stale.json"
-    stale.write_text('{"project": "/repo", "task": "docs/tasks/y"}')
-    os.utime(stale, (now - 3600, now - 3600))
+    old_but_live = heartbeat_dir / "sess--agent2.active"
+    old_but_live.write_text('{"project": "/repo", "task": "docs/tasks/z"}')
+    os.utime(old_but_live, (now - 3600, now - 3600))  # long-running, under the ceiling
+    dead = heartbeat_dir / "sess--agent3.active"
+    dead.write_text('{"project": "/repo", "task": "docs/tasks/y"}')
+    past = now - tasks.MARKER_MAX_AGE_SECONDS - 60
+    os.utime(dead, (past, past))
 
     live = tasks._active_heartbeats(heartbeat_dir, now=now)
     assert ("/repo", "docs/tasks/x") in live
+    assert ("/repo", "docs/tasks/z") in live
     assert ("/repo", "docs/tasks/y") not in live
+
+
+def test_active_heartbeats_ignores_a_session_pointer_alone(tmp_path):
+    heartbeat_dir = tmp_path / "active"
+    heartbeat_dir.mkdir()
+    (heartbeat_dir / "sess.json").write_text('{"project": "/repo", "task": "docs/tasks/x"}')
+
+    assert tasks._active_heartbeats(heartbeat_dir, now=time.time()) == set()
+
+
+def test_active_heartbeats_two_markers_on_different_tasks_are_both_live(tmp_path):
+    heartbeat_dir = tmp_path / "active"
+    heartbeat_dir.mkdir()
+    (heartbeat_dir / "s1--a.active").write_text('{"project": "/repo", "task": "docs/tasks/x"}')
+    (heartbeat_dir / "s2--b.active").write_text('{"project": "/repo", "task": "docs/tasks/y"}')
+
+    live = tasks._active_heartbeats(heartbeat_dir, now=time.time())
+    assert live == {("/repo", "docs/tasks/x"), ("/repo", "docs/tasks/y")}
 
 
 def test_active_heartbeats_ignores_corrupt_and_missing_directory(tmp_path):
@@ -394,8 +417,8 @@ def test_active_heartbeats_ignores_corrupt_and_missing_directory(tmp_path):
 
     heartbeat_dir = tmp_path / "active"
     heartbeat_dir.mkdir()
-    (heartbeat_dir / "bad.json").write_text("not json at all")
-    (heartbeat_dir / "wrong-shape.json").write_text('["not", "a", "dict"]')
+    (heartbeat_dir / "s--bad.active").write_text("not json at all")
+    (heartbeat_dir / "s--wrong-shape.active").write_text('["not", "a", "dict"]')
 
     assert tasks._active_heartbeats(heartbeat_dir, now=time.time()) == set()
 
@@ -418,7 +441,7 @@ def test_build_cards_stages_a_planned_a_needs_attention_and_an_active_card(tmp_p
 
     heartbeat_dir = tmp_path / "active"
     heartbeat_dir.mkdir()
-    (heartbeat_dir / "s1.json").write_text(
+    (heartbeat_dir / "s1--a.active").write_text(
         '{"project": "%s", "task": "docs/tasks/2026-01-03-0000-build-live"}' % str(root)
     )
 
@@ -731,7 +754,7 @@ def test_build_cards_fresh_heartbeat_on_approved_plan_is_building_and_active(tmp
     (folder / "PLAN.md").write_text("plan\n")
     heartbeat_dir = tmp_path / "active"
     heartbeat_dir.mkdir()
-    (heartbeat_dir / "s.json").write_text('{"project": "%s", "task": "docs/tasks/2026-01-01-0000-build-a"}' % str(root))
+    (heartbeat_dir / "s--a.active").write_text('{"project": "%s", "task": "docs/tasks/2026-01-01-0000-build-a"}' % str(root))
 
     card = tasks.build_cards([_Project("proj", root)], heartbeat_dir=heartbeat_dir)[0]
     assert card["column"] == "building"
@@ -748,7 +771,7 @@ def test_build_cards_blocked_keeps_needs_attention_and_active_badges(tmp_path):
         (f / "PLAN.md").write_text("plan\n")
     heartbeat_dir = tmp_path / "active"
     heartbeat_dir.mkdir()
-    (heartbeat_dir / "s.json").write_text('{"project": "%s", "task": "docs/tasks/2026-01-02-0000-build-b"}' % str(root))
+    (heartbeat_dir / "s--a.active").write_text('{"project": "%s", "task": "docs/tasks/2026-01-02-0000-build-b"}' % str(root))
 
     by = {c["folder"].rsplit("/", 1)[1]: c for c in tasks.build_cards([_Project("proj", root)], heartbeat_dir=heartbeat_dir)}
     assert by["2026-01-01-0000-build-a"]["column"] == "blocked"
@@ -782,7 +805,7 @@ def test_build_detail_reports_needs_attention_and_active_per_folder_and_sub_task
     write_state(parent / "02-plain", key_info="in progress")
     heartbeat_dir = tmp_path / "active"
     heartbeat_dir.mkdir()
-    (heartbeat_dir / "s.json").write_text(
+    (heartbeat_dir / "s--a.active").write_text(
         '{"project": "%s", "task": "docs/tasks/2026-01-01-0000-build-parent/01-live"}' % str(root)
     )
 

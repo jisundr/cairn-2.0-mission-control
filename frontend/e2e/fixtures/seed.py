@@ -159,9 +159,9 @@ KANBAN_TASK_FOLDER = "docs/tasks/2026-01-01-0000-research-e2e-drawer-fixture"
 # 05-verification's own parallel-heartbeat scenario (PRD §12 step 9's
 # "scripted equivalent" allowance): two real task folders standing in for
 # two real parallel Claude Code sessions - kanban-liveness.spec.ts writes a
-# heartbeat file under `~/.claude/cairn/active/` (this webServer's own
+# subagent marker (`<session>--<agent>.active`) under `~/.claude/cairn/active/` (this webServer's own
 # scratch HOME, per tasks.DEFAULT_HEARTBEAT_DIR) naming each folder's
-# `(project, task)` pair, ages one past the freshness window, and asserts
+# `(project, task)` pair, ages one past the 4 h marker ceiling, and asserts
 # only that one's card drops out of Ongoing.
 HEARTBEAT_TASK_FOLDER_A = "docs/tasks/2026-01-03-0000-research-e2e-heartbeat-a"
 HEARTBEAT_TASK_FOLDER_B = "docs/tasks/2026-01-03-0000-research-e2e-heartbeat-b"

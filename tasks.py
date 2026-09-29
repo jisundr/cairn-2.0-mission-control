@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Task-folder discovery, frontmatter parsing, `§6.2` column precedence, and
-the `active` heartbeat read for mission control's kanban board. stdlib only.
+the `active` subagent-marker read for mission control's kanban board. stdlib only.
 
 Design: see `docs/tasks/2026-09-28-1345-build-kanban-board/PRD.md` §6.1-6.4,
 §8 (read side only), §9 (`GET /api/tasks` response shape). Read-only against
 every artifact this module touches - a `STATE.md`/`DRAFT.md` file, a
-project's own `.harness/workflow.md`, and a heartbeat file under
+project's own `.harness/workflow.md`, and a subagent marker file under
 `~/.claude/cairn/active/` are only ever read here, never written.
 
 Callers pass in `Project`-shaped objects (a `.label: str` and a
@@ -20,11 +20,13 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-# A live session's heartbeat file is "active" only if its mtime is within
-# this many seconds of request time (§8's freshness window; 10 minutes).
-HEARTBEAT_FRESHNESS_SECONDS = 600
+# A subagent marker (`<session_id>--<agent_id>.active`) is dead if its mtime
+# is older than this many seconds (4 hours). Presence is the activity signal;
+# this only guards markers a crashed subagent never removed. The
+# `hooks/subagent-marker.sh` sweep uses the same ceiling.
+MARKER_MAX_AGE_SECONDS = 14400
 
-# `~/.claude/cairn/active/<session_id>.json`, per §8 - mirrors
+# `~/.claude/cairn/active/<session_id>--<agent_id>.active`, per §8 - mirrors
 # `server.DEFAULT_KNOWN_PROJECTS_PATH`'s global-registry placement.
 DEFAULT_HEARTBEAT_DIR = Path.home() / ".claude" / "cairn" / "active"
 
@@ -421,22 +423,23 @@ def _column(*, kind: str, key_info: str, has_plan: bool, done: bool, active: boo
 
 
 # --------------------------------------------------------------------------
-# §8: the `active` heartbeat read (read-only)
+# §8: the `active` subagent-marker read (read-only)
 # --------------------------------------------------------------------------
 
 
 def _active_heartbeats(heartbeat_dir: Path, now: float) -> set[tuple[str, str]]:
-    """`(project, task)` pairs (as written by a heartbeat file's own JSON,
-    §8) with at least one heartbeat file under `heartbeat_dir` whose mtime
-    is within `HEARTBEAT_FRESHNESS_SECONDS` of `now`. A missing directory,
-    or a stale/corrupt/non-dict/wrong-shaped file, just contributes
-    nothing - read-only and never raises."""
+    """`(project, task)` pairs (as written by a marker file's own JSON, §8)
+    with at least one `*.active` subagent marker under `heartbeat_dir` no
+    older than `MARKER_MAX_AGE_SECONDS`. The session pointer
+    (`<session_id>.json`) is not read: only a running subagent's marker
+    counts. A missing directory, or an expired/corrupt/non-dict/wrong-shaped
+    file, just contributes nothing - read-only and never raises."""
     live: set[tuple[str, str]] = set()
     if not heartbeat_dir.is_dir():
         return live
-    for path in heartbeat_dir.glob("*.json"):
+    for path in heartbeat_dir.glob("*.active"):
         try:
-            if now - path.stat().st_mtime > HEARTBEAT_FRESHNESS_SECONDS:
+            if now - path.stat().st_mtime > MARKER_MAX_AGE_SECONDS:
                 continue
             payload = json.loads(path.read_text())
         except (OSError, ValueError):

@@ -29,12 +29,12 @@ const FOLDER_B = "docs/tasks/2026-01-03-0000-research-e2e-heartbeat-b";
 const SESSION_A = "e2e-heartbeat-session-a";
 const SESSION_B = "e2e-heartbeat-session-b";
 
-// tasks.HEARTBEAT_FRESHNESS_SECONDS is 600 (10 minutes, §8) - comfortably
-// past it without leaning on any other timing assumption.
-const STALE_SECONDS = 700;
+// tasks.MARKER_MAX_AGE_SECONDS is 14400 (4 hours, §8) - comfortably past it
+// without leaning on any other timing assumption.
+const STALE_SECONDS = 15000;
 
 function heartbeatPath(sessionId: string): string {
-  return path.join(HEARTBEAT_DIR, `${sessionId}.json`);
+  return path.join(HEARTBEAT_DIR, `${sessionId}--agent.active`);
 }
 
 // Mirrors the real write side's own payload shape verbatim (`cairn:scope`'s
@@ -69,7 +69,7 @@ test.describe("kanban parallel-session liveness (§8)", () => {
     await expect(cardA.locator(".kcard-ongoing")).toBeVisible();
     await expect(cardB.locator(".kcard-ongoing")).toBeVisible();
 
-    // Age only A's heartbeat file's mtime past the freshness window - B's
+    // Age only A's marker's mtime past the 4 h ceiling - B's
     // stays fresh.
     const staleTime = Date.now() / 1000 - STALE_SECONDS;
     fs.utimesSync(heartbeatPath(SESSION_A), staleTime, staleTime);
