@@ -97,13 +97,14 @@ describe("Kanban", () => {
     _resetAttentionModuleStateForTests();
   });
 
-  it("renders the seven lifecycle stage columns in order", async () => {
+  it("renders the parent tasks column then the seven lifecycle stage columns in order", async () => {
     install([task()]);
     renderKanban();
 
     await waitFor(() => expect(screen.getByText("build-kanban-board")).toBeInTheDocument());
     const titles = screen.getAllByText(/./, { selector: ".kanban-column-title" });
     expect(titles.map((el) => el.textContent)).toEqual([
+      "Parent tasks",
       "Scoping",
       "Awaiting approval",
       "Planned",
@@ -136,6 +137,20 @@ describe("Kanban", () => {
     expect(await1.querySelector(".kcard-attn")).toBeNull();
   });
 
+  it("renders a parent_tasks card under the Parent tasks column", async () => {
+    install([
+      task({
+        folder: "docs/tasks/2026-09-08-0900-parent-one",
+        column: "parent_tasks",
+        sub_tasks: { done: 1, total: 3 },
+      }),
+    ]);
+    renderKanban();
+
+    const parent = await screen.findByTestId("task-card-docs/tasks/2026-09-08-0900-parent-one");
+    expect(parent.closest(".kanban-column-cards")?.previousElementSibling).toHaveTextContent("Parent tasks");
+  });
+
   it("groups a real /api/tasks response into its columns", async () => {
     install([
       task({ folder: "docs/tasks/2026-09-01-0900-ready-one", column: "scoping" }),
@@ -159,7 +174,7 @@ describe("Kanban", () => {
     expect(screen.getByText("done-two")).toBeInTheDocument();
 
     const columns = screen.getAllByText(/^\d+$/, { selector: ".kanban-column-count" });
-    expect(columns.map((el) => el.textContent)).toEqual(["1", "0", "0", "1", "1", "1", "2"]);
+    expect(columns.map((el) => el.textContent)).toEqual(["0", "1", "0", "0", "1", "1", "1", "2"]);
     const stuck = screen.getByTestId("task-card-docs/tasks/2026-09-07-0900-stuck-one");
     expect(stuck.closest(".kanban-column-cards")?.previousElementSibling).toHaveTextContent("Blocked");
     expect(stuck.querySelector(".kcard-attn")).not.toBeNull();
@@ -456,7 +471,7 @@ describe("Kanban", () => {
     });
     renderKanban();
 
-    await waitFor(() => expect(screen.getAllByTestId("kanban-skel")).toHaveLength(21));
+    await waitFor(() => expect(screen.getAllByTestId("kanban-skel")).toHaveLength(24));
     expect(screen.queryByTestId("kanban-empty")).not.toBeInTheDocument();
 
     release?.();

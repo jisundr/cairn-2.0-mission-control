@@ -264,6 +264,21 @@ describe("TaskDrawer", () => {
     expect(screen.queryByTestId("reply-composer")).not.toBeInTheDocument();
   });
 
+  it("shows the Parent task stage chip in the header for a parent_tasks folder", async () => {
+    renderDrawer(
+      detail({
+        column: "parent_tasks",
+        sub_tasks: [
+          { folder: "docs/tasks/parent/01-first", column: "building", active: false, needs_attention: false, goal: "First" },
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByTestId("subtask-row-docs/tasks/parent/01-first")).toBeInTheDocument());
+    const header = document.querySelector(".drawer-badges") as HTMLElement;
+    expect(within(header).getByText("Parent task")).toBeInTheDocument();
+  });
+
   it("shows a parent link in the header when the task has one, re-opening the drawer on click", async () => {
     const onOpenTask = vi.fn();
     const fetchMock = installDetail(detail({ parent: "docs/tasks/2026-09-28-1000-build-kanban-parent" }));

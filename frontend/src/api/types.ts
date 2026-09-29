@@ -152,9 +152,10 @@ export interface ApiError {
 
 // Kanban board (v2, PRD §9) - one card per `docs/tasks/*/` folder (and its
 // sub-task children), across every known project. `column` is the backend's
-// own derived lifecycle stage; `active`/`needs_attention` are orthogonal badge
+// own derived lifecycle stage (`parent_tasks` for a folder with sub-tasks
+// until every child is done); `active`/`needs_attention` are orthogonal badge
 // facts (any column), kept for transparency rather than re-derived here.
-export type TaskColumn = "scoping" | "awaiting_approval" | "planned" | "building" | "in_review" | "blocked" | "done";
+export type TaskColumn = "parent_tasks" | "scoping" | "awaiting_approval" | "planned" | "building" | "in_review" | "blocked" | "done";
 export type TaskKind = "build" | "research" | "review";
 
 export interface TaskSubTasksSummary {

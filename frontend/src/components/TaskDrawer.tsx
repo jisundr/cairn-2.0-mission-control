@@ -111,6 +111,7 @@ export function TaskDrawer({ project, folder, tab, onClose, onTabChange, onOpenT
 }
 
 const COLUMN_LABEL: Record<TaskColumn, string> = {
+  parent_tasks: "Parent task",
   scoping: "Scoping",
   awaiting_approval: "Awaiting approval",
   planned: "Planned",
