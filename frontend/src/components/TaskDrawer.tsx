@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Markdown from "markdown-to-jsx";
 import { useTaskDetail, useTaskDoc } from "../api/hooks";
 import type { TaskColumn, TaskDetail, TaskDoc } from "../api/types";
@@ -322,6 +322,60 @@ function formatDocSize(bytes: number): string {
   return bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
 }
 
+// A doc image's `src` as the browser should fetch it: a scheme URL
+// (`https:`, `data:`, ...) or a protocol-relative `//host` one is left as-is;
+// anything else - `./x.png`, `mockups/y.webp`, and also `/abs.png` or
+// `../x.png` - goes through `/api/tasks/asset`, so the server's containment
+// guard stays the single place that decides what a task folder may serve.
+export function taskAssetUrl(project: string, folder: string, src: string): string {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith("//")) return src;
+  let path = src;
+  try {
+    path = decodeURIComponent(src);
+  } catch {
+    path = src;
+  }
+  return `/api/tasks/asset?${new URLSearchParams({ project, folder, path })}`;
+}
+
+// markdown-to-jsx's `img` override for the Docs tab: routes relative srcs
+// through `taskAssetUrl` and falls back to the alt text when the image is
+// refused, missing, or has no usable src (the default sanitizer drops a
+// `javascript:` one).
+function TaskDocImage({
+  project,
+  folder,
+  src,
+  alt,
+  title,
+}: {
+  project: string;
+  folder: string;
+  src?: string | null;
+  alt?: string;
+  title?: string;
+}) {
+  // Keyed on the src that failed, so a new src gets a fresh attempt.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+
+  if (!src || failedSrc === src) {
+    return (
+      <span className="doc-img-missing" data-testid="doc-img-missing">
+        {alt || src || "image"}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={taskAssetUrl(project, folder, src)}
+      alt={alt}
+      title={title}
+      loading="lazy"
+      onError={() => setFailedSrc(src)}
+    />
+  );
+}
+
 const DOC_ICON = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -340,6 +394,13 @@ function DocsTab({ project, folder, docs }: { project: string; folder: string; d
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const doc = useTaskDoc(project, folder, selectedDoc);
+  const markdownOptions = useMemo(
+    () => ({
+      disableParsingRawHTML: true,
+      overrides: { img: { component: TaskDocImage, props: { project, folder } } },
+    }),
+    [project, folder],
+  );
 
   if (docs.length === 0) {
     return (
@@ -422,7 +483,7 @@ function DocsTab({ project, folder, docs }: { project: string; folder: string; d
               )}
             </div>
             <div className="doc-render">
-              <Markdown options={{ disableParsingRawHTML: true }}>{doc.data.content}</Markdown>
+              <Markdown options={markdownOptions}>{doc.data.content}</Markdown>
             </div>
           </>
         ) : (

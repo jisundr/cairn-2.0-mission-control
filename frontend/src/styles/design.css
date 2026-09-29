@@ -673,6 +673,8 @@ table.detail .dt-val.mono { font-family: var(--mono); font-size: 12px; }
 .doc-render h1:first-child, .doc-render h2:first-child, .doc-render h3:first-child { margin-top: 0; }
 .doc-render p, .doc-render li { font-size: 12.5px; line-height: 1.65; color: var(--ink-soft); margin: 0 0 10px; }
 .doc-render code { font-family: var(--mono); font-size: 11.5px; background: var(--border-soft); border-radius: 3px; padding: 1px 5px; color: var(--ink); }
+.doc-render img { max-width: 100%; height: auto; }
+.doc-img-missing { font-size: 11.5px; font-style: italic; color: var(--ink-faint); border: 1px dashed var(--border); border-radius: 3px; padding: 1px 6px; }
 
 @media (max-width: 900px) {
   .grid, .grid-2, .drill-grid { grid-template-columns: 1fr; }

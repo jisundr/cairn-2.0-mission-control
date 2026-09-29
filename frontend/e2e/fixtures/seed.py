@@ -15,6 +15,7 @@ Usage: python3 seed.py <scratch_dir>
 `<scratch_dir>` is also this webServer's HOME env override, so
 `Path.home() / ".claude" / "projects"` resolves under it.
 """
+import base64
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -29,6 +30,11 @@ SESSION_MAIN = "e2e-session-main"
 SESSION_OTHER = "e2e-session-other"
 SESSION_MAIN_LABEL = "Add a login page to the app"
 AVAILABLE_REQUEST_ID = "req-available-1"
+
+# 2x2 images encoded by Pillow (libwebp for the WebP, lossless), so a real
+# browser decodes both - doc-images.spec.ts asserts naturalWidth > 0.
+FIXTURE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGPUqzViYGBgYgADAAqCAOE9pau+AAAAAElFTkSuQmCC"
+FIXTURE_WEBP_B64 = "UklGRh4AAABXRUJQVlA4TBEAAAAvAUAAAAfQvrpUpv+BiOh/AAA="
 
 
 def iso(dt: datetime) -> str:
@@ -184,6 +190,12 @@ def seed_task_folder(project_root: Path) -> None:
         "> state read on resume; log below is append-only.\n\n"
         "- 2026-01-01: Fixture folder seeded by seed.py for drawer-sizing e2e coverage.\n"
     )
+    # A doc with two relative images (root and subfolder) for
+    # doc-images.spec.ts. NOTES.md, not PLAN.md, so the card's column stays put.
+    (folder / "NOTES.md").write_text("# Notes\n\n![root image](./x.png)\n\n![mockup image](mockups/y.webp)\n")
+    (folder / "x.png").write_bytes(base64.b64decode(FIXTURE_PNG_B64))
+    (folder / "mockups").mkdir(exist_ok=True)
+    (folder / "mockups" / "y.webp").write_bytes(base64.b64decode(FIXTURE_WEBP_B64))
 
 
 def seed_heartbeat_task_folders(project_root: Path) -> None:

@@ -165,6 +165,75 @@ describe("TaskDrawer", () => {
     expect(screen.getByTestId("docs-mobile-dropdown")).toBeInTheDocument();
   });
 
+  it("Docs tab routes relative images through the asset route and leaves scheme/protocol-relative ones alone", async () => {
+    const project = "cairn-2.0";
+    const folder = "docs/tasks/2026-09-28-1345-build-kanban-board";
+    const content = [
+      "![a](./x.png)",
+      "![b](mockups/my%20y.webp)",
+      "![c](https://example.com/c.png)",
+      "![d](data:image/png;base64,iVBORw0KGgo=)",
+      "![e](//cdn.example/e.png)",
+      "![f](javascript:alert(1))",
+    ].join("\n\n");
+    installDetail(
+      { ...detail(), docs: [{ name: "NOTES.md", size: 10, modified: "2026-09-28" }] },
+      { "NOTES.md": { name: "NOTES.md", size: 10, modified: "2026-09-28", content } },
+    );
+    renderWithClient(
+      <TaskDrawer project={project} folder={folder} tab="docs" onClose={noop} onTabChange={noop} onOpenTask={noop} />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("docs-file-NOTES.md")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("docs-file-NOTES.md"));
+    await waitFor(() => expect(document.querySelectorAll(".doc-render img").length).toBeGreaterThan(0));
+
+    const src = (alt: string) => document.querySelector(`.doc-render img[alt="${alt}"]`)?.getAttribute("src");
+    const assetParams = (alt: string) => {
+      const url = new URL(src(alt) ?? "", "http://localhost");
+      expect(url.pathname).toBe("/api/tasks/asset");
+      return Object.fromEntries(url.searchParams);
+    };
+    expect(assetParams("a")).toEqual({ project, folder, path: "./x.png" });
+    expect(assetParams("b")).toEqual({ project, folder, path: "mockups/my y.webp" });
+    expect(src("c")).toBe("https://example.com/c.png");
+    expect(src("d")).toBe("data:image/png;base64,iVBORw0KGgo=");
+    expect(src("e")).toBe("//cdn.example/e.png");
+    expect(document.querySelector('.doc-render [src^="javascript:" i]')).toBeNull();
+    expect(document.querySelector(".doc-render")!.innerHTML).not.toMatch(/javascript:/i);
+  });
+
+  it("Docs tab shows a failed image's alt text in place of the image", async () => {
+    installDetail(
+      { ...detail(), docs: [{ name: "NOTES.md", size: 10, modified: "2026-09-28" }] },
+      { "NOTES.md": { name: "NOTES.md", size: 10, modified: "2026-09-28", content: "![the mockup](./missing.png)" } },
+    );
+    renderWithClient(
+      <TaskDrawer
+        project="cairn-2.0"
+        folder="docs/tasks/2026-09-28-1345-build-kanban-board"
+        tab="docs"
+        onClose={noop}
+        onTabChange={noop}
+        onOpenTask={noop}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("docs-file-NOTES.md")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("docs-file-NOTES.md"));
+    const img = await waitFor(() => {
+      const el = document.querySelector('.doc-render img[alt="the mockup"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(screen.queryByTestId("doc-img-missing")).toBeNull();
+
+    fireEvent.error(img);
+
+    expect(screen.getByTestId("doc-img-missing")).toHaveTextContent("the mockup");
+    expect(document.querySelector('.doc-render img[alt="the mockup"]')).toBeNull();
+  });
+
   it("Docs tab shows the empty state when the folder has no other docs", async () => {
     installDetail(detail({ docs: [] }));
     renderWithClient(
