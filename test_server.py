@@ -1,4 +1,6 @@
+import http.server
 import json
+import socket
 import sys
 import threading
 import time
@@ -1430,6 +1432,51 @@ def test_http_smoke_catch_all_serves_placeholder_when_static_missing(tmp_path):
             assert "text/html" in resp.headers.get("Content-Type", "")
     finally:
         server.stop()
+
+
+@pytest.fixture
+def static_site(tmp_path):
+    """A built-looking static dir: index.html plus assets/app.js."""
+    static = tmp_path / "static"
+    (static / "assets").mkdir(parents=True)
+    (static / "index.html").write_text("<!doctype html><p>spa</p>\n")
+    (static / "assets" / "app.js").write_text("console.log(1)\n")
+    return static
+
+
+@pytest.mark.parametrize("rel", ["/\x00", "/assets/\x00x.js"])
+def test_safe_static_path_refuses_a_nul_byte(static_site, rel):
+    assert server._safe_static_path(static_site, rel) is None
+
+
+def _raw_get(port: int, raw_path: bytes) -> bytes:
+    request = b"GET " + raw_path + b" HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+        sock.sendall(request)
+        chunks = []
+        while chunk := sock.recv(65536):
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+@pytest.mark.parametrize("raw_path", [b"/\x00", b"/assets/\x00x.js"])
+def test_http_static_route_answers_a_raw_nul_byte_with_the_spa_fallback(tmp_path, static_site, raw_path):
+    app = server.TokenMeteringApp(make_project(tmp_path, "proj"), static_dir=static_site)
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(app))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    try:
+        response = _raw_get(port, raw_path)
+        assert response.startswith(b"HTTP/1.")
+        head, _, body = response.partition(b"\r\n\r\n")
+        assert b" 200 " in head.split(b"\r\n")[0]
+        assert body == b"<!doctype html><p>spa</p>\n"
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/assets/app.js") as resp:
+            assert resp.status == 200
+            assert resp.read() == b"console.log(1)\n"
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
 
 
 # --------------------------------------------------------------------------

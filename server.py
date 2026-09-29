@@ -1180,7 +1180,10 @@ def _safe_static_path(static_dir: Path, request_path: str) -> Path | None:
     rel = request_path.lstrip("/")
     if not rel:
         return None
-    candidate = (static_dir / rel).resolve()
+    try:
+        candidate = (static_dir / rel).resolve()
+    except (OSError, RuntimeError, ValueError):  # a symlink loop or NUL falls back, not crashes
+        return None
     try:
         candidate.relative_to(static_dir.resolve())
     except ValueError:
