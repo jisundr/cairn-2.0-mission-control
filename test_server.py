@@ -878,6 +878,24 @@ def test_handle_api_tasks_doc_refuses_a_non_markdown_file(tmp_path):
     assert status == 404
 
 
+def test_handle_api_tasks_doc_and_detail_404_for_symlink_loops(tmp_path):
+    root = make_project(tmp_path, "proj")
+    folder = root / "docs/tasks/2026-01-01-0000-build-a"
+    write_task_state(folder)
+    (folder / "loop.md").symlink_to(folder / "loop.md")
+    loop_folder = root / "docs/tasks/loop"
+    loop_folder.symlink_to(loop_folder)
+
+    app = server.TokenMeteringApp(root)
+    status, _ = app.handle_api(
+        "/api/tasks/doc",
+        {"project": ["proj"], "folder": ["docs/tasks/2026-01-01-0000-build-a"], "file": ["loop.md"]},
+    )
+    assert status == 404
+    status, _ = app.handle_api("/api/tasks/detail", {"project": ["proj"], "folder": ["docs/tasks/loop"]})
+    assert status == 404
+
+
 # --------------------------------------------------------------------------
 # /api/tasks/asset: task-folder images, contained and allow-listed
 # --------------------------------------------------------------------------
@@ -958,6 +976,27 @@ def test_task_asset_refuses_a_folder_outside_docs_tasks(asset_project):
     assert app.task_asset("proj", "docs/tasks/../../elsewhere", "x.png") is None
 
 
+@pytest.mark.parametrize("tasks_root", ["docs/tasks", "docs/tasks/", "docs/tasks/.", "docs/../docs/tasks"])
+def test_task_asset_refuses_the_docs_tasks_root_as_folder(asset_project, tasks_root):
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", tasks_root, "2026-01-01-0000-build-a/x.png") is None
+    assert app.task_asset("proj", _ASSET_FOLDER, "x.png") is not None
+
+
+def test_http_smoke_task_asset_404s_for_the_docs_tasks_root_as_folder(asset_project):
+    port = server.start(asset_project, backfill_enabled=False)
+    try:
+        base = f"http://127.0.0.1:{port}/api/tasks/asset?project=proj"
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(f"{base}&folder=docs/tasks&path=2026-01-01-0000-build-a/x.png")
+        assert excinfo.value.code == 404
+        assert json.loads(excinfo.value.read()) == {"error": "asset not found"}
+        with urllib.request.urlopen(f"{base}&folder={_ASSET_FOLDER}&path=x.png") as resp:
+            assert resp.status == 200
+    finally:
+        server.stop()
+
+
 def test_task_asset_refuses_a_file_symlink_to_a_sibling_image(asset_project):
     folder = asset_project / _ASSET_FOLDER
     (folder / "esc.png").symlink_to(asset_project / _SIBLING_FOLDER / "y.png")
@@ -991,6 +1030,35 @@ def test_task_asset_refuses_a_non_image_name_symlinked_to_an_image(asset_project
     assert app.task_asset("proj", _ASSET_FOLDER, "pic.md") is None
 
 
+def test_task_asset_refuses_a_self_referencing_symlink_loop(asset_project):
+    folder = asset_project / _ASSET_FOLDER
+    (folder / "loop.png").symlink_to(folder / "loop.png")
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, "loop.png") is None
+
+
+def test_task_asset_refuses_a_folder_that_is_a_symlink_loop(asset_project):
+    loop_folder = asset_project / "docs/tasks/loop"
+    loop_folder.symlink_to(loop_folder)
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", "docs/tasks/loop", "x.png") is None
+
+
+def test_http_smoke_task_asset_404s_for_a_symlink_loop(asset_project):
+    folder = asset_project / _ASSET_FOLDER
+    (folder / "loop.png").symlink_to(folder / "loop.png")
+    port = server.start(asset_project, backfill_enabled=False)
+    try:
+        url = f"http://127.0.0.1:{port}/api/tasks/asset?project=proj&folder={_ASSET_FOLDER}&path=loop.png"
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(url)
+        assert excinfo.value.code == 404
+        assert excinfo.value.headers["Content-Type"] == "application/json"
+        assert json.loads(excinfo.value.read()) == {"error": "asset not found"}
+    finally:
+        server.stop()
+
+
 def test_http_smoke_task_asset_serves_bytes_with_image_headers(asset_project):
     port = server.start(asset_project, backfill_enabled=False)
     try:
@@ -1001,6 +1069,7 @@ def test_http_smoke_task_asset_serves_bytes_with_image_headers(asset_project):
             assert resp.headers["Content-Type"] == "image/png"
             assert resp.headers["X-Content-Type-Options"] == "nosniff"
             assert resp.headers["Cache-Control"] == "no-cache"
+            assert resp.headers["Cross-Origin-Resource-Policy"] == "same-origin"
     finally:
         server.stop()
 

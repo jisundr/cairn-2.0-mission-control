@@ -689,8 +689,11 @@ def _resolve_task_folder(project: "Project", folder: str) -> Path | None:
     real directory, rather than degrading to a partial or wrong read."""
     if not folder:
         return None
-    tasks_root = (project.root / "docs" / "tasks").resolve()
-    candidate = (project.root / folder).resolve()
+    try:
+        tasks_root = (project.root / "docs" / "tasks").resolve()
+        candidate = (project.root / folder).resolve()
+    except (OSError, RuntimeError):  # a symlink loop refuses, not crashes
+        return None
     try:
         candidate.relative_to(tasks_root)
     except ValueError:
@@ -704,7 +707,10 @@ def _safe_task_doc_path(folder_dir: Path, file_name: str) -> Path | None:
     name itself (§6.6/§11). Refuses, rather than degrades, anything else."""
     if not file_name or not file_name.endswith(".md"):
         return None
-    candidate = (folder_dir / file_name).resolve()
+    try:
+        candidate = (folder_dir / file_name).resolve()
+    except (OSError, RuntimeError):  # a symlink loop refuses, not crashes
+        return None
     try:
         candidate.relative_to(folder_dir.resolve())
     except ValueError:
@@ -739,8 +745,11 @@ def _safe_task_asset_path(folder_dir: Path, rel: str) -> Path | None:
         return None
     if Path(rel).suffix.lower() not in _TASK_ASSET_TYPES:
         return None
-    root = folder_dir.resolve()
-    candidate = (folder_dir / rel).resolve()
+    try:
+        root = folder_dir.resolve()
+        candidate = (folder_dir / rel).resolve()
+    except (OSError, RuntimeError):  # a symlink loop refuses, not crashes
+        return None
     if not candidate.is_relative_to(root):
         return None
     if candidate.suffix.lower() not in _TASK_ASSET_TYPES:
@@ -1009,12 +1018,14 @@ class TokenMeteringApp:
         """One task-folder image (`GET /api/tasks/asset`) as its resolved
         path and `Content-Type` - `None` (caller's 404) for an unknown
         project, a `folder` that doesn't resolve under that project's
-        `docs/tasks/`, or a `rel` `_safe_task_asset_path` refuses."""
+        `docs/tasks/`, a `folder` that is `docs/tasks/` itself (it would
+        reach every task's images), or a `rel` `_safe_task_asset_path`
+        refuses."""
         project = self._find_project(project_label)
         if project is None:
             return None
         folder_dir = _resolve_task_folder(project, folder or "")
-        if folder_dir is None:
+        if folder_dir is None or folder_dir == (project.root / "docs" / "tasks").resolve():
             return None
         asset_path = _safe_task_asset_path(folder_dir, rel or "")
         if asset_path is None:
@@ -1219,6 +1230,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.end_headers()
         self.wfile.write(content)
 
