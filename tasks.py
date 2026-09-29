@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Task-folder discovery, frontmatter parsing, `§6.2` column precedence, and
-the `active` subagent-marker read for mission control's kanban board. stdlib only.
+"""Task-folder discovery, frontmatter parsing, `§6.2` column precedence, the
+parent-task rollup (a folder with sub-tasks sits in `parent_tasks` until every
+child is done), and the `active` subagent-marker read for mission control's
+kanban board. stdlib only.
 
 Design: see `docs/tasks/2026-09-28-1345-build-kanban-board/PRD.md` §6.1-6.4,
 §8 (read side only), §9 (`GET /api/tasks` response shape). Read-only against
@@ -424,9 +426,11 @@ def _done_fact(kind: str, key_info: str, folder_name: str, project_root: Path, g
 
 
 def _column(*, kind: str, key_info: str, has_plan: bool, done: bool, active: bool) -> str:
-    """First-match-wins lifecycle stage: done -> blocked -> awaiting_approval ->
-    scoping (research kind, or no PLAN.md) -> in_review -> building (active,
-    or a plan not merely approved) -> planned."""
+    """First-match-wins lifecycle stage from a folder's own facts: done ->
+    blocked -> awaiting_approval -> scoping (research kind, or no PLAN.md) ->
+    in_review -> building (active, or a plan not merely approved) -> planned.
+    A folder with sub-tasks has this overridden afterwards by
+    `_apply_parent_rollup` (`parent_tasks` until every child is done)."""
     if done:
         return "done"
     if _blocked_fact(key_info):
@@ -445,6 +449,30 @@ def _column(*, kind: str, key_info: str, has_plan: bool, done: bool, active: boo
 # --------------------------------------------------------------------------
 # §8: the `active` subagent-marker read (read-only)
 # --------------------------------------------------------------------------
+
+
+def _apply_parent_rollup(cards: list[dict]) -> dict[tuple[str, str], list[dict]]:
+    """The one exception to `_column`'s first-match precedence: a card with
+    sub-task children takes its column from them alone - `done` (and
+    `done: True`) once every direct child's column is `done`, else
+    `parent_tasks` (and `done: False`) - whatever its own merged PR,
+    `key_info` done word, blocked or approval facts say. Cards are visited
+    deepest first so a nested parent's rolled-up column is final before its
+    own parent reads it. `needs_attention` and `active` are left alone.
+    Mutates `cards` in place; returns the `(project, parent folder) ->
+    direct children` grouping so callers don't rebuild it."""
+    children_by_parent: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for card in cards:
+        if card["parent"] is not None:
+            children_by_parent[(card["project"], card["parent"])].append(card)
+
+    for card in sorted(cards, key=lambda c: c["folder"].count("/"), reverse=True):
+        children = children_by_parent.get((card["project"], card["folder"]))
+        if children:
+            all_done = all(c["column"] == "done" for c in children)
+            card["column"] = "done" if all_done else "parent_tasks"
+            card["done"] = all_done
+    return children_by_parent
 
 
 def _active_heartbeats(heartbeat_dir: Path, now: float) -> set[tuple[str, str]]:
@@ -568,12 +596,9 @@ def build_cards(
                 cards.append(card)
 
     # §6.4: direct-child count per parent, one level, done = children whose
-    # own column is Done - scoped by project so two projects' folders that
-    # happen to share a relative path never mix.
-    children_by_parent: dict[tuple[str, str], list[dict]] = defaultdict(list)
-    for card in cards:
-        if card["parent"] is not None:
-            children_by_parent[(card["project"], card["parent"])].append(card)
+    # rolled-up column is Done - scoped by project so two projects' folders
+    # that happen to share a relative path never mix.
+    children_by_parent = _apply_parent_rollup(cards)
 
     for card in cards:
         children = children_by_parent.get((card["project"], card["folder"]))
@@ -655,6 +680,16 @@ def build_detail(
     if card is None:
         return None
 
+    # The folder plus every descendant, rolled up the same way `build_cards`
+    # does, so the drawer's column (and each child entry's) matches the board.
+    subtree = [card]
+    for child_dir, child_source in _iter_task_dirs(project.root):
+        if child_dir != folder_dir and child_dir.is_relative_to(folder_dir):
+            child_card = _card_fields(child_dir, child_source, project, tasks_root, live_heartbeats, gh_cache, gh_ttl)
+            if child_card is not None:
+                subtree.append(child_card)
+    children_by_parent = _apply_parent_rollup(subtree)
+
     if source_path.name == "DRAFT.md":
         frontmatter = {"goal": card["goal"], "key_info": card["key_info"]}
         activity = None
@@ -665,26 +700,19 @@ def build_detail(
         activity = parse_activity(text)
         draft_content = None
 
-    children = [
-        (child_dir, child_source)
-        for child_dir, child_source in _iter_task_dirs(project.root)
-        if child_dir.parent == folder_dir
-    ]
+    children = children_by_parent.get((card["project"], card["folder"]))
     sub_tasks = None
     if children:
-        sub_tasks = []
-        for child_dir, child_source in children:
-            child_card = _card_fields(child_dir, child_source, project, tasks_root, live_heartbeats, gh_cache, gh_ttl)
-            if child_card is not None:
-                sub_tasks.append(
-                    {
-                        "folder": child_card["folder"],
-                        "column": child_card["column"],
-                        "needs_attention": child_card["needs_attention"],
-                        "active": child_card["active"],
-                        "goal": child_card["goal"],
-                    }
-                )
+        sub_tasks = [
+            {
+                "folder": child_card["folder"],
+                "column": child_card["column"],
+                "needs_attention": child_card["needs_attention"],
+                "active": child_card["active"],
+                "goal": child_card["goal"],
+            }
+            for child_card in children
+        ]
 
     return {
         "project": card["project"],

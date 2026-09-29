@@ -528,7 +528,7 @@ def test_build_cards_stages_a_planned_a_needs_attention_and_an_active_card(tmp_p
     assert all(c["sub_tasks"] is None for c in cards)
 
 
-def test_build_cards_two_sibling_sub_tasks_report_independent_columns_and_parent_progress(tmp_path):
+def test_build_cards_two_sibling_sub_tasks_report_independent_columns_and_parent_sits_in_parent_tasks(tmp_path):
     root = tmp_path / "proj"
     parent = root / "docs/tasks/2026-01-01-0000-build-parent"
     write_state(parent, key_info="in progress")
@@ -551,7 +551,7 @@ def test_build_cards_two_sibling_sub_tasks_report_independent_columns_and_parent
 
     parent_card = by_folder["docs/tasks/2026-01-01-0000-build-parent"]
     assert parent_card["sub_tasks"] == {"done": 1, "total": 2}
-    assert parent_card["column"] == "scoping"  # parent's own facts, independent of its children
+    assert parent_card["column"] == "parent_tasks"  # one child not done: children decide, not the parent's own facts
 
 
 def test_build_cards_omits_sub_tasks_field_for_a_folder_with_no_children(tmp_path):
@@ -686,6 +686,7 @@ def test_build_cards_two_real_sibling_sub_tasks_report_different_columns(tmp_pat
     assert first["parent"] == parent
     assert second["parent"] == parent
     assert by_folder[parent]["sub_tasks"] == {"done": 2, "total": 2}
+    assert by_folder[parent]["column"] == "done"
 
 
 # --------------------------------------------------------------------------
@@ -897,3 +898,100 @@ def test_build_detail_reports_needs_attention_and_active_per_folder_and_sub_task
     assert (subs["01-live"]["needs_attention"], subs["01-live"]["active"]) == (False, True)
     assert (subs["02-plain"]["needs_attention"], subs["02-plain"]["active"]) == (False, False)
     assert all("column" in e for e in detail["sub_tasks"])
+
+
+# --------------------------------------------------------------------------
+# Parent-task rollup: a folder with sub-tasks sits in `parent_tasks` until
+# every child is done, whatever its own facts say
+# --------------------------------------------------------------------------
+
+_PARENT = "docs/tasks/2026-01-01-0000-build-parent"
+
+
+def _direct_commit_project(root: Path) -> None:
+    (root / ".harness").mkdir(parents=True, exist_ok=True)
+    (root / ".harness" / "workflow.md").write_text("## Branching\n- Direct commits to main, no feature branches\n")
+
+
+def test_parent_with_done_word_and_merged_pr_stays_in_parent_tasks_while_a_child_is_not_done(tmp_path, monkeypatch):
+    root = (tmp_path / "proj").resolve()
+    parent = root / _PARENT
+    write_state(parent, key_info="Sub-task 01 done; 02 building")
+    (parent / "PLAN.md").write_text("plan\n")
+    write_state(parent / "01-a", key_info="Done, closed.")
+    write_state(parent / "02-b", key_info="implementing step 2")
+    (parent / "02-b" / "PLAN.md").write_text("plan\n")
+
+    def _fake_run(args, **kwargs):
+        merged = "1" if args[:3] == ["gh", "pr", "list"] and args[4] == "2026-01-01-0000-build-parent" else "0"
+        return _fake_gh_result(stdout=merged)
+
+    monkeypatch.setattr(tasks.subprocess, "run", _fake_run)
+
+    by_folder = {c["folder"]: c for c in tasks.build_cards([_Project("proj", root)])}
+    assert by_folder[_PARENT]["column"] == "parent_tasks"
+    assert by_folder[_PARENT]["done"] is False
+    assert by_folder[f"{_PARENT}/02-b"]["column"] == "building"
+
+
+def test_parent_is_done_once_every_child_is_done_whatever_its_own_key_info_says(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    _direct_commit_project(root)
+    parent = root / _PARENT
+    write_state(parent, key_info="in progress")
+    write_state(parent / "01-a", key_info="Done, closed.")
+    write_state(parent / "02-b", key_info="Complete.")
+
+    card = {c["folder"]: c for c in tasks.build_cards([_Project("proj", root)])}[_PARENT]
+    assert card["column"] == "done"
+    assert card["done"] is True
+    assert card["sub_tasks"] == {"done": 2, "total": 2}
+
+
+@pytest.mark.parametrize("key_info", ["blocked on X", "awaiting plan approval", "needs-human: blocked on X"])
+def test_parent_blocked_or_awaiting_approval_still_sits_in_parent_tasks_and_keeps_its_attention_flag(tmp_path, key_info):
+    root = (tmp_path / "proj").resolve()
+    _direct_commit_project(root)
+    parent = root / _PARENT
+    write_state(parent, key_info=key_info)
+    write_state(parent / "01-a", key_info="implementing")
+
+    card = {c["folder"]: c for c in tasks.build_cards([_Project("proj", root)])}[_PARENT]
+    assert card["column"] == "parent_tasks"
+    assert card["needs_attention"] is key_info.startswith("needs-human")
+
+
+def test_nested_parents_roll_up_deepest_first(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    _direct_commit_project(root)
+    parent = root / _PARENT
+    write_state(parent, key_info="Done, closed.")
+    write_state(parent / "01", key_info="Done, closed.")
+    write_state(parent / "01" / "01-x", key_info="implementing")
+
+    by_folder = {c["folder"]: c for c in tasks.build_cards([_Project("proj", root)])}
+    assert by_folder[f"{_PARENT}/01"]["column"] == "parent_tasks"
+    assert by_folder[_PARENT]["column"] == "parent_tasks"
+    assert by_folder[_PARENT]["sub_tasks"] == {"done": 0, "total": 1}
+
+    write_state(parent / "01" / "01-x", key_info="Done, closed.")
+    by_folder = {c["folder"]: c for c in tasks.build_cards([_Project("proj", root)])}
+    assert by_folder[f"{_PARENT}/01"]["column"] == "done"
+    assert by_folder[_PARENT]["column"] == "done"
+    assert by_folder[_PARENT]["sub_tasks"] == {"done": 1, "total": 1}
+
+
+def test_build_detail_matches_the_board_for_a_parent_and_a_nested_child(tmp_path):
+    root = (tmp_path / "proj").resolve()
+    _direct_commit_project(root)
+    parent = root / _PARENT
+    write_state(parent, key_info="Done, closed.")
+    write_state(parent / "01", key_info="Done, closed.")
+    write_state(parent / "01" / "01-x", key_info="implementing")
+
+    detail = tasks.build_detail(_Project("proj", root), parent)
+    assert detail["column"] == "parent_tasks"
+    assert [(e["folder"], e["column"]) for e in detail["sub_tasks"]] == [(f"{_PARENT}/01", "parent_tasks")]
+
+    board = {c["folder"]: c["column"] for c in tasks.build_cards([_Project("proj", root)])}
+    assert detail["column"] == board[_PARENT]
