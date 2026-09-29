@@ -807,7 +807,7 @@ def test_handle_api_tasks_detail_happy_path_includes_frontmatter_activity_and_do
     assert status == 200
     data = body["data"]
     assert data["frontmatter"]["goal"] == "Ship it"
-    assert data["activity"] == [{"date": "2026-01-01", "text": "started."}]
+    assert data["activity"] == [{"date": "2026-01-01", "time": None, "text": "started."}]
     assert data["draft_content"] is None
     assert [d["name"] for d in data["docs"]] == ["REQUIREMENTS.md"]
     assert "generated_at" in body["meta"]

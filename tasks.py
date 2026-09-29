@@ -186,17 +186,24 @@ def _draft_summary(text: str) -> tuple[str, str]:
     return goal, non_empty[-1]
 
 
-_ACTIVITY_START_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2}(?:/\d{2})?)(?: \d{2}:\d{2})?:?\s*")
+_ACTIVITY_DATE = r"\d{4}-\d{2}-\d{2}(?:/\d{2})?"
+_ACTIVITY_START_RE = re.compile(
+    rf"^(?:- (?P<date>{_ACTIVITY_DATE})(?: (?P<time>\d{{2}}:\d{{2}}))?:?"
+    rf"|(?P<bare_date>{_ACTIVITY_DATE})(?: (?P<bare_time>\d{{2}}:\d{{2}}))?:)\s*"
+)
 
 
 def parse_activity(text: str) -> list[dict]:
     """`STATE.md`'s append-only log, after its frontmatter, split into one
-    timeline entry per `^- YYYY-MM-DD` line - a `YYYY-MM-DD/DD` date-range
-    prefix is also recognized, both forms being in real use in this repo's
-    own task folders (§6.5). Every real entry in this repo is written as
-    one dense line, never soft-wrapped, so an entry's text is exactly that
-    line's own content (after its `- YYYY-MM-DD:` prefix); a line matching
-    neither pattern - the `cairn:shared`-template blockquote that precedes
+    timeline entry per dated line, in either of the two forms real task
+    folders use: dashed (`- YYYY-MM-DD[ HH:MM][:]`) or bare
+    (`YYYY-MM-DD[ HH:MM]:`, where the trailing colon is required so a prose
+    line that merely starts with a date is not taken for an entry). A
+    `YYYY-MM-DD/DD` date-range prefix is also recognized (§6.5). Each entry
+    is `{date, time, text}`, `time` being the line's `HH:MM` or None when it
+    has none. Every real entry in this repo is written as one dense line,
+    never soft-wrapped, so an entry's text is exactly that line's own
+    content after its dated prefix; a line in neither form - the `cairn:shared`-template blockquote that precedes
     the first entry, a blank separator line, or hand-edited stray content -
     is dropped outright rather than folded into whichever entry precedes
     it, and never errors the whole parse (`pricing.py`/`parser.py`'s own
@@ -209,7 +216,13 @@ def parse_activity(text: str) -> list[dict]:
     for line in body_lines:
         match = _ACTIVITY_START_RE.match(line)
         if match:
-            entries.append({"date": match.group(1), "text": line[match.end() :].strip()})
+            entries.append(
+                {
+                    "date": match.group("date") or match.group("bare_date"),
+                    "time": match.group("time") or match.group("bare_time"),
+                    "text": line[match.end() :].strip(),
+                }
+            )
         # else: dropped - either precedes the first entry (blockquote/blank)
         # or is unparseable stray content, per §6.5.
     return entries

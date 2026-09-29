@@ -152,8 +152,8 @@ def test_parse_activity_splits_entries_skips_blockquote_and_drops_unparseable_li
     )
     entries = tasks.parse_activity(text)
     assert entries == [
-        {"date": "2026-09-01", "text": "first entry."},
-        {"date": "2026-09-15", "text": "second entry, latest."},
+        {"date": "2026-09-01", "time": None, "text": "first entry."},
+        {"date": "2026-09-15", "time": None, "text": "second entry, latest."},
     ]
 
 
@@ -166,8 +166,8 @@ def test_parse_activity_accepts_a_date_range_prefix_and_drops_a_stray_continuati
     )
     entries = tasks.parse_activity(text)
     assert entries == [
-        {"date": "2026-09-27/28", "text": "a real entry, always written as one dense line here."},
-        {"date": "2026-09-29", "text": "next entry."},
+        {"date": "2026-09-27/28", "time": None, "text": "a real entry, always written as one dense line here."},
+        {"date": "2026-09-29", "time": None, "text": "next entry."},
     ]
 
 
@@ -178,7 +178,48 @@ def test_parse_activity_empty_when_there_is_no_body_after_frontmatter():
 def test_parse_activity_consumes_a_time_of_day_without_leaking_it_into_text():
     text = "---\ngoal: g\n---\n- 2026-09-28 09:15: did X.\n"
     entries = tasks.parse_activity(text)
-    assert entries == [{"date": "2026-09-28", "text": "did X."}]
+    assert entries == [{"date": "2026-09-28", "time": "09:15", "text": "did X."}]
+
+
+def test_parse_activity_reads_bare_dated_lines_as_older_task_folders_write_them():
+    """Older folders log bare `YYYY-MM-DD[ HH:MM]:` lines, and some carry a
+    stray `---` after the frontmatter; every dated line still counts."""
+    text = (
+        "---\ngoal: g\n---\n"
+        "> The frontmatter above is the state read on resume.\n"
+        "---\n\n"
+        "2026-09-23: first.\n"
+        "2026-09-23 14:05: second.\n"
+        "2026-09-24/25: range.\n"
+    )
+    entries = tasks.parse_activity(text)
+    assert entries == [
+        {"date": "2026-09-23", "time": None, "text": "first."},
+        {"date": "2026-09-23", "time": "14:05", "text": "second."},
+        {"date": "2026-09-24/25", "time": None, "text": "range."},
+    ]
+
+
+def test_parse_activity_drops_a_bare_date_line_without_its_colon():
+    text = "---\ngoal: g\n---\n2026-09-23 was a Tuesday\n2026-09-23 14:05 no colon either\n"
+    assert tasks.parse_activity(text) == []
+
+
+def test_parse_activity_keeps_file_order_across_interleaved_bare_and_dashed_lines():
+    text = (
+        "---\ngoal: g\n---\n"
+        "2026-09-20: bare one.\n"
+        "- 2026-09-21 08:00: dashed one.\n"
+        "2026-09-22 09:30: bare two.\n"
+        "- 2026-09-23: dashed two.\n"
+    )
+    entries = tasks.parse_activity(text)
+    assert [(e["date"], e["time"], e["text"]) for e in entries] == [
+        ("2026-09-20", None, "bare one."),
+        ("2026-09-21", "08:00", "dashed one."),
+        ("2026-09-22", "09:30", "bare two."),
+        ("2026-09-23", None, "dashed two."),
+    ]
 
 
 def test_parse_activity_against_this_repos_own_real_multi_entry_state_md():
@@ -643,8 +684,8 @@ def test_build_detail_assembles_frontmatter_activity_and_docs_for_a_state_folder
 
     assert detail["frontmatter"]["goal"] == "Ship it"
     assert detail["activity"] == [
-        {"date": "2026-01-01", "text": "started."},
-        {"date": "2026-01-02", "text": "continued."},
+        {"date": "2026-01-01", "time": None, "text": "started."},
+        {"date": "2026-01-02", "time": None, "text": "continued."},
     ]
     assert detail["draft_content"] is None
     assert detail["sub_tasks"] is None
