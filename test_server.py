@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1055,6 +1056,58 @@ def test_http_smoke_task_asset_404s_for_a_symlink_loop(asset_project):
         assert excinfo.value.code == 404
         assert excinfo.value.headers["Content-Type"] == "application/json"
         assert json.loads(excinfo.value.read()) == {"error": "asset not found"}
+    finally:
+        server.stop()
+
+
+# A NUL byte in `folder` or `file` makes Path.resolve() raise ValueError; each
+# case pairs the refused request with its route's standard 404 body and a valid
+# request to the same route that still answers afterwards.
+_NUL_CASES = [
+    pytest.param(
+        "/api/tasks/doc", {"folder": "docs\x00x", "file": "REQUIREMENTS.md"},
+        {"error": "document not found"}, {"folder": _ASSET_FOLDER, "file": "REQUIREMENTS.md"}, id="doc-folder",
+    ),
+    pytest.param(
+        "/api/tasks/doc", {"folder": _ASSET_FOLDER, "file": "a\x00.md"},
+        {"error": "document not found"}, {"folder": _ASSET_FOLDER, "file": "REQUIREMENTS.md"}, id="doc-file",
+    ),
+    pytest.param(
+        "/api/tasks/detail", {"folder": "docs\x00x"},
+        {"error": "task folder not found"}, {"folder": _ASSET_FOLDER}, id="detail-folder",
+    ),
+    pytest.param(
+        "/api/tasks/asset", {"folder": "docs\x00x", "path": "x.png"},
+        {"error": "asset not found"}, {"folder": _ASSET_FOLDER, "path": "x.png"}, id="asset-folder",
+    ),
+]
+
+
+@pytest.mark.parametrize("route, bad, body, good", _NUL_CASES)
+def test_task_routes_refuse_a_nul_byte_in_folder_or_file(asset_project, route, bad, body, good):
+    app = server.TokenMeteringApp(asset_project)
+    if route == "/api/tasks/asset":
+        assert app.task_asset("proj", bad["folder"], bad["path"]) is None
+        assert app.task_asset("proj", good["folder"], good["path"]) is not None
+        return
+    status, payload = app.handle_api(route, {"project": ["proj"], **{k: [v] for k, v in bad.items()}})
+    assert (status, payload) == (404, body)
+    status, _ = app.handle_api(route, {"project": ["proj"], **{k: [v] for k, v in good.items()}})
+    assert status == 200
+
+
+@pytest.mark.parametrize("route, bad, body, good", _NUL_CASES)
+def test_http_smoke_task_routes_404_for_a_nul_byte_and_keep_answering(asset_project, route, bad, body, good):
+    port = server.start(asset_project, backfill_enabled=False)
+    try:
+        base = f"http://127.0.0.1:{port}{route}?"
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(base + urllib.parse.urlencode({"project": "proj", **bad}))
+        assert excinfo.value.code == 404
+        assert excinfo.value.headers["Content-Type"] == "application/json"
+        assert json.loads(excinfo.value.read()) == body
+        with urllib.request.urlopen(base + urllib.parse.urlencode({"project": "proj", **good})) as resp:
+            assert resp.status == 200
     finally:
         server.stop()
 

@@ -692,7 +692,7 @@ def _resolve_task_folder(project: "Project", folder: str) -> Path | None:
     try:
         tasks_root = (project.root / "docs" / "tasks").resolve()
         candidate = (project.root / folder).resolve()
-    except (OSError, RuntimeError):  # a symlink loop refuses, not crashes
+    except (OSError, RuntimeError, ValueError):  # a symlink loop or NUL refuses, not crashes
         return None
     try:
         candidate.relative_to(tasks_root)
@@ -709,7 +709,7 @@ def _safe_task_doc_path(folder_dir: Path, file_name: str) -> Path | None:
         return None
     try:
         candidate = (folder_dir / file_name).resolve()
-    except (OSError, RuntimeError):  # a symlink loop refuses, not crashes
+    except (OSError, RuntimeError, ValueError):  # a symlink loop or NUL refuses, not crashes
         return None
     try:
         candidate.relative_to(folder_dir.resolve())
@@ -748,7 +748,7 @@ def _safe_task_asset_path(folder_dir: Path, rel: str) -> Path | None:
     try:
         root = folder_dir.resolve()
         candidate = (folder_dir / rel).resolve()
-    except (OSError, RuntimeError):  # a symlink loop refuses, not crashes
+    except (OSError, RuntimeError, ValueError):  # a symlink loop or NUL refuses, not crashes
         return None
     if not candidate.is_relative_to(root):
         return None
