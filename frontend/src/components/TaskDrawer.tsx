@@ -3,7 +3,7 @@ import Markdown from "markdown-to-jsx";
 import { useTaskDetail, useTaskDoc } from "../api/hooks";
 import type { TaskColumn, TaskDetail, TaskDoc } from "../api/types";
 import { attentionLabel } from "../lib/attention";
-import { taskDisplayName } from "../lib/format";
+import { formatActivityStamp, taskDisplayName } from "../lib/format";
 
 interface TaskDrawerProps {
   project: string;
@@ -304,7 +304,9 @@ function DetailsTab({ data, onOpenTask }: { data: TaskDetail; onOpenTask: (proje
           <div className="timeline">
             {data.activity.map((entry, i) => (
               <div className="timeline-item" key={`${entry.date}-${i}`}>
-                <div className="timeline-date">{entry.time ? `${entry.date} ${entry.time}` : entry.date}</div>
+                <div className="timeline-date" title={entry.time ? `${entry.date} ${entry.time} UTC` : undefined}>
+                  {formatActivityStamp(entry.date, entry.time)}
+                </div>
                 <div className="timeline-text">{entry.text}</div>
               </div>
             ))}

@@ -71,16 +71,24 @@ describe("TaskDrawer", () => {
     expect(document.querySelectorAll(".timeline-item")).toHaveLength(3);
   });
 
-  it("shows an entry's time next to its date, and the date alone when it has no time", async () => {
-    const activity: ActivityEntry[] = [
-      { date: "2026-09-29", time: "21:39", text: "Sub-task folder created." },
-      { date: "2026-09-23", time: null, text: "Older bare-dated entry." },
-    ];
-    renderDrawer(detail({ activity }));
+  it("shows relative time for an entry with a time, with the exact UTC stamp on hover, and the date alone when it has no time", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-29T22:00:00Z"));
+    try {
+      const activity: ActivityEntry[] = [
+        { date: "2026-09-29", time: "21:39", text: "Sub-task folder created." },
+        { date: "2026-09-23", time: null, text: "Older bare-dated entry." },
+      ];
+      renderDrawer(detail({ activity }));
 
-    await waitFor(() => expect(screen.getByText(activity[0].text)).toBeInTheDocument());
-    const dates = Array.from(document.querySelectorAll(".timeline-date")).map((el) => el.textContent);
-    expect(dates).toEqual(["2026-09-29 21:39", "2026-09-23"]);
+      await waitFor(() => expect(screen.getByText(activity[0].text)).toBeInTheDocument());
+      const dateEls = Array.from(document.querySelectorAll(".timeline-date"));
+      expect(dateEls.map((el) => el.textContent)).toEqual(["21m ago", "2026-09-23"]);
+      expect(dateEls[0].getAttribute("title")).toBe("2026-09-29 21:39 UTC");
+      expect(dateEls[1].hasAttribute("title")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders draft_content instead of a timeline for a review (DRAFT.md-only) folder", async () => {

@@ -93,13 +93,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const LAST_TOUCHED_SKEW_MS = 5 * 60 * 1000;
 
 export function formatLastTouched(lastLogDate: string, lastLogTime: string, now: Date = new Date()): string {
-  if (!lastLogTime) return formatDateLabel(lastLogDate);
+  if (!lastLogTime) return formatDateLabel(lastLogDate, now);
   const diffMs = now.getTime() - new Date(`${lastLogDate}T${lastLogTime}:00Z`).getTime();
   // Beyond the skew allowance a future stamp (e.g. a local-time line read as
   // UTC) is untrustworthy, so show the date rather than "0s ago".
   if (diffMs < -LAST_TOUCHED_SKEW_MS) return formatDateLabel(lastLogDate, now);
   if (diffMs >= DAY_MS) return `${Math.floor(diffMs / DAY_MS)}d ago`;
   return formatRelativeToNow(`${lastLogDate}T${lastLogTime}:00Z`, now);
+}
+
+// A drawer Activity stamp: relative time for a single-day entry that has a
+// time (log times are UTC), else the raw date or range as the log wrote it.
+export function formatActivityStamp(date: string, time: string | null, now: Date = new Date()): string {
+  if (time && /^\d{4}-\d{2}-\d{2}$/.test(date)) return formatLastTouched(date, time, now);
+  return date;
 }
 
 export function formatRelativeToNow(iso: string, now: Date = new Date()): string {

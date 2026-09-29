@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDateLabel, formatLastTouched, taskDisplayName } from "./format";
+import { formatActivityStamp, formatDateLabel, formatLastTouched, taskDisplayName } from "./format";
 
 describe("formatDateLabel", () => {
   it("omits the year when the date falls in the given now's year", () => {
@@ -49,6 +49,26 @@ describe("formatLastTouched", () => {
 
   it("falls back to the date label when the time is empty", () => {
     const now = new Date("2026-09-29T10:00:00Z");
-    expect(formatLastTouched("2019-01-05", "", now)).toBe(formatDateLabel("2019-01-05"));
+    expect(formatLastTouched("2019-01-05", "", now)).toBe(formatDateLabel("2019-01-05", now));
+  });
+});
+
+describe("formatActivityStamp", () => {
+  const now = new Date("2026-09-29T10:00:00Z");
+
+  it("renders relative time for a single-day entry with a time", () => {
+    expect(formatActivityStamp("2026-09-29", "09:45", now)).toBe("15m ago");
+  });
+
+  it("keeps the raw date when the entry has no time", () => {
+    expect(formatActivityStamp("2026-09-23", null, now)).toBe("2026-09-23");
+  });
+
+  it("keeps a date range raw even when it carries a time", () => {
+    expect(formatActivityStamp("2026-09-28/29", "09:00", now)).toBe("2026-09-28/29");
+  });
+
+  it("falls back to the date label for a time beyond the future skew allowance", () => {
+    expect(formatActivityStamp("2026-09-29", "10:15", now)).toBe(formatDateLabel("2026-09-29", now));
   });
 });
