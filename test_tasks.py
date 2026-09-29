@@ -137,6 +137,36 @@ def test_last_log_datetime_returns_empty_time_for_a_date_only_line_and_last_log_
     assert tasks._last_log_date(text) == "2026-09-15"
 
 
+def test_last_log_datetime_reads_a_bare_timed_line():
+    text = "---\ngoal: g\n---\n2026-09-23 14:05: did the thing.\n"
+    assert tasks._last_log_datetime(text) == ("2026-09-23", "14:05")
+
+
+def test_last_log_datetime_reads_a_bare_date_only_line():
+    text = "---\ngoal: g\n---\n2026-09-23: did the thing.\n"
+    assert tasks._last_log_datetime(text) == ("2026-09-23", "")
+
+
+def test_last_log_datetime_keeps_the_first_day_of_a_bare_range():
+    text = "---\ngoal: g\n---\n2026-09-28/29 10:00: spanned two days.\n"
+    assert tasks._last_log_datetime(text) == ("2026-09-28", "10:00")
+
+
+def test_last_log_datetime_returns_the_last_of_interleaved_bare_and_dashed_lines():
+    text = (
+        "---\ngoal: g\n---\n"
+        "2026-09-20 08:00: bare first.\n"
+        "- 2026-09-21 09:00: dashed second.\n"
+        "2026-09-22: bare third, latest.\n"
+    )
+    assert tasks._last_log_datetime(text) == ("2026-09-22", "")
+
+
+def test_last_log_datetime_ignores_a_bare_date_without_a_colon():
+    text = "---\ngoal: g\n---\n2026-09-23 was a Tuesday.\n"
+    assert tasks._last_log_datetime(text) is None
+
+
 # --------------------------------------------------------------------------
 # Activity-log parsing (§6.5)
 # --------------------------------------------------------------------------
@@ -578,6 +608,16 @@ def test_build_cards_returns_empty_last_log_time_for_a_date_only_last_line(tmp_p
     assert cards[0]["last_log_time"] == ""
 
 
+def test_build_cards_reads_date_and_time_from_a_bare_timed_last_line(tmp_path):
+    root = tmp_path / "proj"
+    write_state(root / "docs/tasks/2026-01-01-0000-build-bare", body="2026-09-23 14:05: continued.\n")
+
+    cards = tasks.build_cards([_Project("proj", root)])
+
+    assert cards[0]["last_log_date"] == "2026-09-23"
+    assert cards[0]["last_log_time"] == "14:05"
+
+
 def test_build_cards_handles_a_review_folder_with_only_a_draft_md(tmp_path):
     root = tmp_path / "proj"
     folder = root / "docs/tasks/2026-01-05-0000-review-org-repo-pr-9"
@@ -610,8 +650,8 @@ def test_build_cards_against_this_repos_own_real_task_folder(tmp_path):
     folder whose retroactively-added `STATE.md` never changes: `key_info`
     reads "Done. ..." (whole-word `done`, precedence's second bucket), its
     name predates the `<kind>` convention (falls back to `build`), and its
-    one log line isn't `^- `-prefixed, so `last_log_date` degrades to the
-    folder's own date prefix rather than erroring."""
+    one log line is bare (`2026-09-25: ...`, no `- ` prefix), which is now
+    read as a log line, so `last_log_date` is that line's date."""
     heartbeat_dir = tmp_path / "active"  # empty: nothing in this repo is "live" for this test
 
     cards = tasks.build_cards([_Project("cairn-2.0", CAIRN_ROOT)], heartbeat_dir=heartbeat_dir)
@@ -625,7 +665,7 @@ def test_build_cards_against_this_repos_own_real_task_folder(tmp_path):
     assert card["done"] is True
     assert card["needs_attention"] is False
     assert card["column"] == "done"
-    assert card["last_log_date"] == "2026-09-11"
+    assert card["last_log_date"] == "2026-09-25"
 
 
 def test_build_cards_two_real_sibling_sub_tasks_report_different_columns(tmp_path):

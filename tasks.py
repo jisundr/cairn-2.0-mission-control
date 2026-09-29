@@ -139,28 +139,35 @@ def parse_frontmatter(text: str) -> dict[str, str | list[str]]:
     return _parse_frontmatter_lines(lines[bounds[0] : bounds[1]])
 
 
-_LOG_DATE_RE = re.compile(r"^- (\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?", re.MULTILINE)
+_LOG_DATE_RE = re.compile(
+    r"^- (\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?"
+    r"|^(\d{4}-\d{2}-\d{2})(?:/\d{2})?(?: (\d{2}:\d{2}))?:",
+    re.MULTILINE,
+)
 
 
 def _last_log_datetime(text: str) -> tuple[str, str] | None:
-    """The last `(date, time)` pair starting a `^- ` line in `text`'s body
+    """The last `(date, time)` pair starting a log line in `text`'s body
     (after the frontmatter's closing `---`, or the whole text if there's no
-    frontmatter) - `time` is `""` when that line carries no `HH:MM` suffix.
-    `None` if no dated line is found at all."""
+    frontmatter). A log line is either dashed (`- YYYY-MM-DD[ HH:MM]`) or
+    bare (`YYYY-MM-DD[/DD][ HH:MM]:` - the colon is required, as in
+    `_ACTIVITY_START_RE`, so prose that merely opens with a date is not
+    read). A range keeps only its first day. `time` is `""` when that line
+    carries no `HH:MM`. `None` if no dated line is found at all."""
     lines = text.splitlines()
     bounds = _frontmatter_bounds(lines)
     body_lines = lines[bounds[1] + 1 :] if bounds is not None else lines
-    matches = _LOG_DATE_RE.findall("\n".join(body_lines))
+    matches = list(_LOG_DATE_RE.finditer("\n".join(body_lines)))
     if not matches:
         return None
-    date, time_of_day = matches[-1]
-    return date, time_of_day
+    dashed_date, dashed_time, bare_date, bare_time = matches[-1].groups()
+    return dashed_date or bare_date, dashed_time or bare_time or ""
 
 
 def _last_log_date(text: str) -> str | None:
-    """The last `YYYY-MM-DD` date starting a `^- ` line in `text`'s body -
-    `None` if no such line is found. A thin delegate to `_last_log_datetime`
-    that drops the time-of-day."""
+    """The last `YYYY-MM-DD` date starting a dashed or bare log line in
+    `text`'s body - `None` if no such line is found. A thin delegate to
+    `_last_log_datetime` that drops the time-of-day."""
     result = _last_log_datetime(text)
     return result[0] if result else None
 
