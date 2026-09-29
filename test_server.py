@@ -2,6 +2,7 @@ import json
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -875,6 +876,147 @@ def test_handle_api_tasks_doc_refuses_a_non_markdown_file(tmp_path):
         {"project": ["proj"], "folder": ["docs/tasks/2026-01-01-0000-build-a"], "file": ["notes.txt"]},
     )
     assert status == 404
+
+
+# --------------------------------------------------------------------------
+# /api/tasks/asset: task-folder images, contained and allow-listed
+# --------------------------------------------------------------------------
+
+_ASSET_FOLDER = "docs/tasks/2026-01-01-0000-build-a"
+_SIBLING_FOLDER = "docs/tasks/2026-01-02-0000-build-b"
+_PNG_BYTES = b"\x89PNG\r\n\x1a\nnot-really-a-png"
+
+
+@pytest.fixture
+def asset_project(tmp_path):
+    """A project with folder-a (x.png, mockups/y.webp, notes.txt, x.svg,
+    REQUIREMENTS.md) and sibling folder-b (y.png) to escape towards."""
+    root = make_project(tmp_path, "proj")
+    folder = root / _ASSET_FOLDER
+    write_task_state(folder)
+    (folder / "x.png").write_bytes(_PNG_BYTES)
+    (folder / "mockups").mkdir()
+    (folder / "mockups" / "y.webp").write_bytes(b"RIFF....WEBP")
+    (folder / "notes.txt").write_text("not an image\n")
+    (folder / "x.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>\n")
+    (folder / "REQUIREMENTS.md").write_text("# reqs\n")
+    sibling = root / _SIBLING_FOLDER
+    write_task_state(sibling)
+    (sibling / "y.png").write_bytes(b"sibling png")
+    return root
+
+
+def test_task_asset_serves_root_dot_slash_and_subfolder_images(asset_project):
+    app = server.TokenMeteringApp(asset_project)
+    folder = (asset_project / _ASSET_FOLDER).resolve()
+
+    assert app.task_asset("proj", _ASSET_FOLDER, "x.png") == (folder / "x.png", "image/png")
+    assert app.task_asset("proj", _ASSET_FOLDER, "./x.png") == (folder / "x.png", "image/png")
+    assert app.task_asset("proj", _ASSET_FOLDER, "mockups/y.webp") == (folder / "mockups" / "y.webp", "image/webp")
+
+
+@pytest.mark.parametrize("rel", ["notes.txt", "x.svg", "REQUIREMENTS.md", "STATE.md", "z.png", "", "mockups"])
+def test_task_asset_refuses_non_images_and_missing_files(asset_project, rel):
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, rel) is None
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "../2026-01-02-0000-build-b/y.png",
+        "mockups/../../2026-01-02-0000-build-b/y.png",
+        "..\\2026-01-02-0000-build-b\\y.png",
+        "x.png\x00.png",
+    ],
+)
+def test_task_asset_refuses_traversal_to_an_existing_sibling_image(asset_project, rel):
+    assert (asset_project / _SIBLING_FOLDER / "y.png").is_file()
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, rel) is None
+
+
+def test_task_asset_refuses_an_absolute_path_to_a_real_image(asset_project):
+    real_png = (asset_project / _ASSET_FOLDER / "x.png").resolve()
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, str(real_png)) is None
+
+
+def test_task_asset_refuses_unknown_project_or_folder(asset_project):
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("no-such-project", _ASSET_FOLDER, "x.png") is None
+    assert app.task_asset("proj", "docs/tasks/no-such-folder", "x.png") is None
+    assert app.task_asset("proj", None, "x.png") is None
+
+
+def test_task_asset_refuses_a_folder_outside_docs_tasks(asset_project):
+    outside = asset_project / "elsewhere"
+    outside.mkdir()
+    (outside / "x.png").write_bytes(_PNG_BYTES)
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", "elsewhere", "x.png") is None
+    assert app.task_asset("proj", "docs/tasks/../../elsewhere", "x.png") is None
+
+
+def test_task_asset_refuses_a_file_symlink_to_a_sibling_image(asset_project):
+    folder = asset_project / _ASSET_FOLDER
+    (folder / "esc.png").symlink_to(asset_project / _SIBLING_FOLDER / "y.png")
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, "esc.png") is None
+
+
+def test_task_asset_refuses_a_dir_symlink_out_of_the_folder(asset_project, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "y.png").write_bytes(_PNG_BYTES)
+    folder = asset_project / _ASSET_FOLDER
+    (folder / "linked").symlink_to(outside, target_is_directory=True)
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, "linked/y.png") is None
+
+
+def test_task_asset_refuses_an_image_named_symlink_to_state_md(asset_project):
+    folder = asset_project / _ASSET_FOLDER
+    (folder / "alias.png").symlink_to(folder / "STATE.md")
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, "alias.png") is None
+
+
+def test_task_asset_refuses_a_non_image_name_symlinked_to_an_image(asset_project):
+    # The requested name's own extension is checked too, not just the
+    # resolved target's - `pic.md` never serves, whatever it points at.
+    folder = asset_project / _ASSET_FOLDER
+    (folder / "pic.md").symlink_to(folder / "x.png")
+    app = server.TokenMeteringApp(asset_project)
+    assert app.task_asset("proj", _ASSET_FOLDER, "pic.md") is None
+
+
+def test_http_smoke_task_asset_serves_bytes_with_image_headers(asset_project):
+    port = server.start(asset_project, backfill_enabled=False)
+    try:
+        url = f"http://127.0.0.1:{port}/api/tasks/asset?project=proj&folder={_ASSET_FOLDER}&path=x.png"
+        with urllib.request.urlopen(url) as resp:
+            assert resp.status == 200
+            assert resp.read() == _PNG_BYTES
+            assert resp.headers["Content-Type"] == "image/png"
+            assert resp.headers["X-Content-Type-Options"] == "nosniff"
+            assert resp.headers["Cache-Control"] == "no-cache"
+    finally:
+        server.stop()
+
+
+@pytest.mark.parametrize("rel", ["../STATE.md", "STATE.md", "%2Fetc%2Fhosts", "x.svg"])
+def test_http_smoke_task_asset_404s_with_a_json_error(asset_project, rel):
+    port = server.start(asset_project, backfill_enabled=False)
+    try:
+        url = f"http://127.0.0.1:{port}/api/tasks/asset?project=proj&folder={_ASSET_FOLDER}&path={rel}"
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(url)
+        assert excinfo.value.code == 404
+        assert excinfo.value.headers["Content-Type"] == "application/json"
+        assert json.loads(excinfo.value.read()) == {"error": "asset not found"}
+    finally:
+        server.stop()
 
 
 # --------------------------------------------------------------------------

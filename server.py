@@ -674,8 +674,9 @@ _DISCOVERY_CACHE_TTL_SECONDS = 5
 
 
 # --------------------------------------------------------------------------
-# Task detail/doc path safety (PRD §6.6, §9) - the drawer's two new routes
-# each take a client-supplied relative path; both guards below follow
+# Task detail/doc/asset path safety (PRD §6.6, §9) - the drawer's three
+# task routes (`/api/tasks/detail`, `/api/tasks/doc`, `/api/tasks/asset`)
+# each take a client-supplied relative path; the guards below follow
 # `_safe_static_path`'s own resolve-and-`relative_to` pattern (below, in the
 # HTTP section), scoped to a task folder instead of `static_dir`.
 # --------------------------------------------------------------------------
@@ -711,6 +712,40 @@ def _safe_task_doc_path(folder_dir: Path, file_name: str) -> Path | None:
     if candidate.parent != folder_dir.resolve():
         return None
     return candidate
+
+
+# Image types `/api/tasks/asset` serves, keyed on lowercased suffix. A fixed
+# table rather than `mimetypes`, whose answers vary with the host's own
+# registry; SVG is absent on purpose (an SVG opened directly can run script
+# in the dashboard's origin).
+_TASK_ASSET_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def _safe_task_asset_path(folder_dir: Path, rel: str) -> Path | None:
+    """`rel` (subfolders allowed, e.g. `mockups/y.webp`) resolved inside the
+    already-resolved `folder_dir` - an allow-listed image type both as
+    requested and after symlink resolution, still inside the folder once
+    resolved, and a real file. Refuses (returns `None`) anything else:
+    `..` segments, absolute paths, backslashes, NULs, symlink escapes."""
+    if not rel or "\x00" in rel or "\\" in rel or rel.startswith("/"):
+        return None
+    if any(segment == ".." for segment in rel.split("/")):
+        return None
+    if Path(rel).suffix.lower() not in _TASK_ASSET_TYPES:
+        return None
+    root = folder_dir.resolve()
+    candidate = (folder_dir / rel).resolve()
+    if not candidate.is_relative_to(root):
+        return None
+    if candidate.suffix.lower() not in _TASK_ASSET_TYPES:
+        return None
+    return candidate if candidate.is_file() else None
 
 
 class TokenMeteringApp:
@@ -970,6 +1005,22 @@ class TokenMeteringApp:
             return None
         return {"content": content}
 
+    def task_asset(self, project_label: str | None, folder: str | None, rel: str | None) -> tuple[Path, str] | None:
+        """One task-folder image (`GET /api/tasks/asset`) as its resolved
+        path and `Content-Type` - `None` (caller's 404) for an unknown
+        project, a `folder` that doesn't resolve under that project's
+        `docs/tasks/`, or a `rel` `_safe_task_asset_path` refuses."""
+        project = self._find_project(project_label)
+        if project is None:
+            return None
+        folder_dir = _resolve_task_folder(project, folder or "")
+        if folder_dir is None:
+            return None
+        asset_path = _safe_task_asset_path(folder_dir, rel or "")
+        if asset_path is None:
+            return None
+        return asset_path, _TASK_ASSET_TYPES[asset_path.suffix.lower()]
+
     def sessions(self, range_key: str, project_filter: str | None = None) -> list[dict]:
         projects = _filter_projects(self.projects(), project_filter)
         since, until = range_bounds(range_key)
@@ -1139,11 +1190,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/tasks/asset":
+            self._serve_task_asset(parse_qs(parsed.query))
+            return
         if parsed.path.startswith("/api/"):
             status, body = self.app.handle_api(parsed.path, parse_qs(parsed.query))
             self._write_json(status, body)
             return
         self._serve_static_or_fallback(parsed.path)
+
+    def _serve_task_asset(self, params: dict):
+        def first(key):
+            values = params.get(key)
+            return values[0] if values else None
+
+        found = self.app.task_asset(first("project"), first("folder"), first("path"))
+        content = None
+        if found is not None:
+            try:
+                content = found[0].read_bytes()
+            except OSError:
+                content = None
+        if content is None:
+            self._write_json(404, {"error": "asset not found"})
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", found[1])
+        self.send_header("Content-Length", str(len(content)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(content)
 
     def _serve_static_or_fallback(self, path: str):
         static_dir = self.app.static_dir
