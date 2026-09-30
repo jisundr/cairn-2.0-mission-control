@@ -50,6 +50,7 @@ def test_connect_creates_db_file_and_tables(tmp_path):
     assert "usage_limit_events" in tables
     assert "tool_uses" in tables
     assert "session_labels" in tables
+    assert "session_versions" in tables
 
 
 def test_connect_creates_expected_indexes(tmp_path):
@@ -305,3 +306,87 @@ def test_connect_migrates_a_pre_marker_database_without_crashing(tmp_path):
     assert row == ("req-legacy",)
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     assert version == db.SCHEMA_VERSION
+
+
+def _write_v1_database(cairn_dir):
+    """A tokens.db as schema version 1 left it: the four original tables,
+    user_version stamped 1, rows already in `calls` and `session_labels`,
+    and no `session_versions` table."""
+    cairn_dir.mkdir(parents=True)
+    legacy = sqlite3.connect(db.db_path(cairn_dir))
+    legacy.execute(db.CALLS_SCHEMA)
+    legacy.execute(db.USAGE_LIMIT_EVENTS_SCHEMA)
+    legacy.execute(db.TOOL_USES_SCHEMA)
+    legacy.execute(db.SESSION_LABELS_SCHEMA)
+    for i in range(3):
+        legacy.execute(
+            "INSERT INTO calls (request_id, session_id, agent, model, timestamp, "
+            "input_tokens, output_tokens) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (f"req-v1-{i}", "sess-v1", "main", "claude-sonnet-5", "2026-08-28T00:00:00Z", 1, 1),
+        )
+    legacy.execute(
+        "INSERT INTO session_labels (session_id, label, updated_at) VALUES (?, ?, ?)",
+        ("sess-v1", "Old title", "2026-08-28 00:00:00"),
+    )
+    legacy.execute("PRAGMA user_version = 1")
+    legacy.commit()
+    legacy.close()
+
+
+def test_connect_migrates_a_v1_database_keeping_every_row(tmp_path):
+    cairn_dir = tmp_path / ".cairn"
+    _write_v1_database(cairn_dir)
+
+    conn = db.connect(cairn_dir)
+
+    rows = conn.execute("SELECT request_id FROM calls ORDER BY request_id").fetchall()
+    assert rows == [("req-v1-0",), ("req-v1-1",), ("req-v1-2",)]
+    label = conn.execute("SELECT label FROM session_labels WHERE session_id = 'sess-v1'").fetchone()
+    assert label == ("Old title",)
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "session_versions" in tables
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert db.has_session_version(conn, "sess-v1") is False
+
+
+def test_connect_twice_on_a_migrated_database_changes_nothing(tmp_path):
+    cairn_dir = tmp_path / ".cairn"
+    _write_v1_database(cairn_dir)
+    first = db.connect(cairn_dir)
+    db.save_session_version(first, session_id="sess-v1", version="0.40.0")
+    first.commit()
+    first.close()
+
+    second = db.connect(cairn_dir)
+
+    assert second.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 3
+    assert second.execute(
+        "SELECT cairn_version FROM session_versions WHERE session_id = 'sess-v1'"
+    ).fetchone() == ("0.40.0",)
+    tables = [r[0] for r in second.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+    assert tables.count("session_versions") == 1
+    assert second.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_save_session_version_round_trips(tmp_path):
+    conn = db.connect(tmp_path / ".cairn")
+    assert db.has_session_version(conn, "sess-1") is False
+
+    db.save_session_version(conn, session_id="sess-1", version="0.40.0")
+
+    assert db.has_session_version(conn, "sess-1") is True
+    row = conn.execute(
+        "SELECT cairn_version, recorded_at FROM session_versions WHERE session_id = 'sess-1'"
+    ).fetchone()
+    assert row[0] == "0.40.0"
+    assert row[1]
+
+
+def test_save_session_version_keeps_the_first_value(tmp_path):
+    conn = db.connect(tmp_path / ".cairn")
+
+    db.save_session_version(conn, session_id="sess-1", version="0.39.5")
+    db.save_session_version(conn, session_id="sess-1", version="0.40.0")
+
+    rows = conn.execute("SELECT cairn_version FROM session_versions WHERE session_id = 'sess-1'").fetchall()
+    assert rows == [("0.39.5",)]

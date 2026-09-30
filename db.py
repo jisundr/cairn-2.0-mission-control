@@ -2,7 +2,8 @@
 """SQLite store for cairn's token-metering feature. stdlib only.
 
 Usage:
-    from db import connect, insert_call, insert_usage_limit_event, insert_tool_use, save_session_label
+    from db import connect, insert_call, insert_usage_limit_event, insert_tool_use, save_session_label,
+                    save_session_version
     conn = connect(cairn_dir)   # opens/creates cairn_dir/tokens.db with tables
 """
 import sqlite3
@@ -15,7 +16,9 @@ DB_FILENAME = "tokens.db"
 # older `tokens.db` apart from the current shape. Every schema statement
 # so far is `CREATE TABLE IF NOT EXISTS` (additive-only), so no separate
 # migration function is needed yet — just the marker itself.
-SCHEMA_VERSION = 1
+# 1: calls, usage_limit_events, tool_uses, session_labels.
+# 2: adds session_versions (the cairn version each session started under).
+SCHEMA_VERSION = 2
 
 CALLS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS calls (
@@ -61,6 +64,14 @@ CREATE TABLE IF NOT EXISTS session_labels (
 )
 """
 
+SESSION_VERSIONS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS session_versions (
+    session_id TEXT PRIMARY KEY,
+    cairn_version TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
+)
+"""
+
 CALLS_SESSION_INDEX = "CREATE INDEX IF NOT EXISTS idx_calls_session_id ON calls (session_id)"
 CALLS_TIMESTAMP_INDEX = "CREATE INDEX IF NOT EXISTS idx_calls_timestamp_trunc ON calls (substr(timestamp, 1, 19))"
 TOOL_USES_SESSION_INDEX = "CREATE INDEX IF NOT EXISTS idx_tool_uses_session_id ON tool_uses (session_id)"
@@ -84,6 +95,7 @@ def connect(cairn_dir: Path) -> sqlite3.Connection:
     conn.execute(USAGE_LIMIT_EVENTS_SCHEMA)
     conn.execute(TOOL_USES_SCHEMA)
     conn.execute(SESSION_LABELS_SCHEMA)
+    conn.execute(SESSION_VERSIONS_SCHEMA)
     conn.execute(CALLS_SESSION_INDEX)
     conn.execute(CALLS_TIMESTAMP_INDEX)
     conn.execute(TOOL_USES_SESSION_INDEX)
@@ -159,4 +171,24 @@ def save_session_label(conn, *, session_id, label):
         "VALUES (?, ?, CURRENT_TIMESTAMP) "
         "ON CONFLICT(session_id) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at",
         (session_id, label),
+    )
+
+
+def has_session_version(conn, session_id: str) -> bool:
+    """True if a cairn version is already recorded for `session_id`."""
+    row = conn.execute(
+        "SELECT 1 FROM session_versions WHERE session_id = ? LIMIT 1", (session_id,)
+    ).fetchone()
+    return row is not None
+
+
+def save_session_version(conn, *, session_id, version):
+    """Records the cairn version `session_id` started under. The first
+    value saved wins: a later call for the same session is ignored, so a
+    session resumed after a plugin update keeps its start version.
+    """
+    conn.execute(
+        "INSERT OR IGNORE INTO session_versions (session_id, cairn_version, recorded_at) "
+        "VALUES (?, ?, CURRENT_TIMESTAMP)",
+        (session_id, version),
     )
