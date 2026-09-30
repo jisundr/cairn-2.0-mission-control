@@ -295,13 +295,16 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                     <td data-testid={`cairn-version-${s.session_id}`}>
                       {s.cairn_version || "unknown"}
                       {s.cairn_version && newest && compareVersions(s.cairn_version, newest) < 0 && (
-                        <span
-                          className="kcard-kind cairn-older"
-                          data-testid={`cairn-older-${s.session_id}`}
-                          title={`Older than ${newest}, newest in this range`}
-                        >
-                          older
-                        </span>
+                        <>
+                          {" "}
+                          <span
+                            className="kcard-kind cairn-older"
+                            data-testid={`cairn-older-${s.session_id}`}
+                            title={`Older than ${newest}, newest in this range`}
+                          >
+                            older
+                          </span>
+                        </>
                       )}
                     </td>
                     <td>{formatSessionDuration(s.started, s.ended)}</td>
