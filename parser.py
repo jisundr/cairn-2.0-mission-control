@@ -22,6 +22,14 @@ AGENT_ID_RE = re.compile(r"agentId:\s*([0-9a-f]+)")
 # sentinel instead, so the row (and its token/cost data) is still kept.
 UNKNOWN_MODEL = "(unknown)"
 
+# hooks/session-start.sh appends `<utc>\t<version>\t<session_id>` to
+# `.cairn/sessions.log` on every SessionStart. The version field is only
+# trusted if it looks like a release number - `unknown` (plugin.json
+# unreadable) and anything else fail this match and are skipped.
+SESSIONS_LOG = "sessions.log"
+MAX_VERSION_LEN = 64
+CAIRN_VERSION_RE = re.compile(r"\d{1,4}\.\d{1,4}\.\d{1,4}(?:[-+][0-9A-Za-z.-]{1,32})?")
+
 
 def _tool_result_text(content):
     if isinstance(content, str):
@@ -159,6 +167,28 @@ def parse_transcript(entries: list[dict], *, session_id: str, agent: str, conn) 
             )
 
 
+def _record_cairn_version(conn, cairn_dir: Path, session_id: str) -> None:
+    """Copies the cairn version `session_id` started under from
+    sessions.log into tokens.db, once. The first valid line for the
+    session wins, so a session resumed after a plugin update keeps its
+    start version. A missing or unreadable log saves nothing.
+    """
+    if db.has_session_version(conn, session_id):
+        return
+    try:
+        with (Path(cairn_dir) / SESSIONS_LOG).open(encoding="utf-8") as f:
+            for line in f:
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) != 3 or fields[2] != session_id:
+                    continue
+                version = fields[1]
+                if len(version) <= MAX_VERSION_LEN and CAIRN_VERSION_RE.fullmatch(version):
+                    db.save_session_version(conn, session_id=session_id, version=version)
+                    return
+    except (OSError, UnicodeDecodeError):
+        return
+
+
 def parse_session(cairn_dir: Path, transcript_path: Path, session_id: str) -> str | None:
     transcript_path = Path(transcript_path)
     conn = db.connect(Path(cairn_dir))
@@ -181,6 +211,8 @@ def parse_session(cairn_dir: Path, transcript_path: Path, session_id: str) -> st
             # previously saved label (from an earlier pass that did) is
             # never wiped out by one that didn't.
             db.save_session_label(conn, session_id=session_id, label=title)
+
+        _record_cairn_version(conn, Path(cairn_dir), session_id)
 
         conn.commit()
         return title

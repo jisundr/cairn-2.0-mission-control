@@ -370,3 +370,109 @@ def test_parse_transcript_sentinels_an_absent_model_key_instead_of_crashing(tmp_
     conn = db.connect(cairn_dir)
     model = conn.execute("SELECT model FROM calls WHERE request_id = 'req-1'").fetchone()[0]
     assert model == parser.UNKNOWN_MODEL
+
+
+def _write_sessions_log(cairn_dir: Path, lines):
+    cairn_dir.mkdir(parents=True, exist_ok=True)
+    (cairn_dir / "sessions.log").write_text("".join(line + "\n" for line in lines))
+
+
+def _stored_version(cairn_dir: Path, session_id: str):
+    conn = db.connect(cairn_dir)
+    try:
+        row = conn.execute(
+            "SELECT cairn_version FROM session_versions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else None
+
+
+def _parse_with_log(tmp_path, log_lines, session_id="sess-1"):
+    cairn_dir = tmp_path / ".cairn"
+    if log_lines is not None:
+        _write_sessions_log(cairn_dir, log_lines)
+    transcript_path = tmp_path / "session.jsonl"
+    write_jsonl(transcript_path, [make_call_entry("req-1")])
+    parser.parse_session(cairn_dir, transcript_path, session_id)
+    return cairn_dir
+
+
+def test_parse_session_stores_the_cairn_version_from_sessions_log(tmp_path):
+    cairn_dir = _parse_with_log(tmp_path, [
+        "2026-09-30T00:00:00Z\t0.39.5\tsess-other",
+        "2026-09-30T00:01:00Z\t0.40.0\tsess-1",
+    ])
+
+    assert _stored_version(cairn_dir, "sess-1") == "0.40.0"
+
+
+def test_parse_session_accepts_a_prerelease_suffix(tmp_path):
+    cairn_dir = _parse_with_log(tmp_path, ["2026-09-30T00:00:00Z\t1.2.3-rc.1\tsess-1"])
+
+    assert _stored_version(cairn_dir, "sess-1") == "1.2.3-rc.1"
+
+
+def test_parse_session_ignores_unknown_malformed_and_other_sessions_versions(tmp_path):
+    cairn_dir = _parse_with_log(tmp_path, [
+        "2026-09-30T00:00:00Z\tunknown\tsess-1",
+        "2026-09-30T00:00:01Z\t<script>alert(1)</script>\tsess-1",
+        "2026-09-30T00:00:02Z\t1.2\tsess-1",
+        "2026-09-30T00:00:03Z\t1.2.3-" + "a" * 60 + "\tsess-1",
+        "2026-09-30T00:00:04Z\t0.40.0\tsess-1\textra",
+        "2026-09-30T00:00:05Z\t0.40.0",
+        "2026-09-30T00:00:06Z\t0.40.0\tsess-other",
+    ])
+
+    assert _stored_version(cairn_dir, "sess-1") is None
+
+
+def test_parse_session_without_a_sessions_log_stores_no_version(tmp_path):
+    cairn_dir = _parse_with_log(tmp_path, None)
+
+    assert _stored_version(cairn_dir, "sess-1") is None
+    conn = db.connect(cairn_dir)
+    assert conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 1
+
+
+def test_parse_session_with_an_undecodable_sessions_log_still_parses(tmp_path):
+    cairn_dir = tmp_path / ".cairn"
+    cairn_dir.mkdir(parents=True)
+    (cairn_dir / "sessions.log").write_bytes(b"\xff\xfe\t0.40.0\tsess-1\n")
+    transcript_path = tmp_path / "session.jsonl"
+    write_jsonl(transcript_path, [make_call_entry("req-1")])
+
+    parser.parse_session(cairn_dir, transcript_path, "sess-1")
+
+    assert _stored_version(cairn_dir, "sess-1") is None
+    conn = db.connect(cairn_dir)
+    assert conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 1
+
+
+def test_parse_session_keeps_the_first_version_after_a_later_update(tmp_path):
+    cairn_dir = _parse_with_log(tmp_path, ["2026-09-30T00:00:00Z\t0.39.5\tsess-1"])
+    with (cairn_dir / "sessions.log").open("a") as f:
+        f.write("2026-09-30T01:00:00Z\t0.40.0\tsess-1\n")
+    parser.parse_session(cairn_dir, tmp_path / "session.jsonl", "sess-1")
+
+    assert _stored_version(cairn_dir, "sess-1") == "0.39.5"
+
+
+def test_parse_session_takes_the_first_valid_line_over_an_earlier_unknown(tmp_path):
+    cairn_dir = _parse_with_log(tmp_path, [
+        "2026-09-30T00:00:00Z\tunknown\tsess-1",
+        "2026-09-30T00:05:00Z\t0.40.0\tsess-1",
+        "2026-09-30T00:09:00Z\t0.41.0\tsess-1",
+    ])
+
+    assert _stored_version(cairn_dir, "sess-1") == "0.40.0"
+
+
+def test_parse_session_picks_up_a_version_logged_after_an_earlier_parse(tmp_path):
+    cairn_dir = _parse_with_log(tmp_path, [])
+    assert _stored_version(cairn_dir, "sess-1") is None
+
+    _write_sessions_log(cairn_dir, ["2026-09-30T00:00:00Z\t0.40.0\tsess-1"])
+    parser.parse_session(cairn_dir, tmp_path / "session.jsonl", "sess-1")
+
+    assert _stored_version(cairn_dir, "sess-1") == "0.40.0"
