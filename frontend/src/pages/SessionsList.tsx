@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useProjects, useSessions } from "../api/hooks";
 import type { RangeKey, SessionSummary } from "../api/types";
 import { AppHeader, type AppTab } from "../components/AppHeader";
@@ -7,7 +7,7 @@ import { InstallScopeRow } from "../components/InstallScopeRow";
 import { PanelError } from "../components/PanelError";
 import { RangeControl } from "../components/RangeControl";
 import { InboxIcon } from "../components/icons";
-import { formatCost, formatSessionDuration, formatStarted, shortId } from "../lib/format";
+import { compareVersions, formatCost, formatSessionDuration, formatStarted, shortId } from "../lib/format";
 
 interface SessionsListProps {
   activeTab: AppTab;
@@ -48,6 +48,20 @@ function sortValue(s: SessionSummary, column: SortColumn): number {
 function sortSessions(rows: SessionSummary[], column: SortColumn, direction: SortDirection): SessionSummary[] {
   const sign = direction === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => sign * (sortValue(a, column) - sortValue(b, column)));
+}
+
+// The newest cairn version among `rows` (the whole loaded range, not one
+// page), or undefined when none has a version. A row whose version is below
+// this is marked "older": it started under a plugin that has since moved on
+// in this range, not necessarily older than the installed plugin.
+function newestVersion(rows: SessionSummary[]): string | undefined {
+  let newest: string | undefined;
+  for (const s of rows) {
+    const v = s.cairn_version;
+    if (!v) continue;
+    if (newest === undefined || compareVersions(v, newest) > 0) newest = v;
+  }
+  return newest;
 }
 
 // Round-trips range/project/sort/dir/page through `?range=&project=&sort=&
@@ -126,6 +140,7 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
   const multiProject = (projects.data?.projects.length ?? 0) > 1;
   const sessions = useSessions({ range, project: projectFilter });
   const sorted = sortSessions(sessions.data ?? [], sortColumn, sortDirection);
+  const newest = newestVersion(sessions.data ?? []);
   const pageStart = (page - 1) * PAGE_SIZE;
   const pageRows = sorted.slice(pageStart, pageStart + PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
@@ -255,14 +270,12 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                   <th>Session</th>
                   {multiProject && <th>Project</th>}
                   {SORT_COLUMNS.map((c) => (
-                    <th
-                      key={c.value}
-                      className="sortable"
-                      data-testid={`sort-header-${c.value}`}
-                      onClick={() => setSortColumn(c.value)}
-                    >
-                      {c.label}
-                    </th>
+                    <Fragment key={c.value}>
+                      <th className="sortable" data-testid={`sort-header-${c.value}`} onClick={() => setSortColumn(c.value)}>
+                        {c.label}
+                      </th>
+                      {c.value === "started" && <th>cairn</th>}
+                    </Fragment>
                   ))}
                 </tr>
               </thead>
@@ -279,6 +292,18 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                     </td>
                     {multiProject && <td>{s.project}</td>}
                     <td>{formatStarted(s.started)}</td>
+                    <td data-testid={`cairn-version-${s.session_id}`}>
+                      {s.cairn_version || "unknown"}
+                      {s.cairn_version && newest && compareVersions(s.cairn_version, newest) < 0 && (
+                        <span
+                          className="kcard-kind cairn-older"
+                          data-testid={`cairn-older-${s.session_id}`}
+                          title={`Older than ${newest}, newest in this range`}
+                        >
+                          older
+                        </span>
+                      )}
+                    </td>
                     <td>{formatSessionDuration(s.started, s.ended)}</td>
                     <td>{s.tokens.toLocaleString()}</td>
                     <td>

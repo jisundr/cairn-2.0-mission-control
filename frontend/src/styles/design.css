@@ -399,6 +399,8 @@ table.sessions td { padding: 10px 12px; border-bottom: 1px solid var(--border-so
 table.sessions tr:last-child td { border-bottom: none; }
 table.sessions a.sess { color: var(--add); text-decoration: none; font-weight: 600; }
 table.sessions a.sess:hover { text-decoration: underline; }
+/* "older" marker on a session's cairn cell - .kcard-kind's small neutral badge, spaced off the version text. */
+.cairn-older { margin-left: 6px; }
 
 /* ---- Sessions List (S1/S2): sort control group + pagination ---- */
 /* No `overflow: hidden` here (dropped from a live-review fix) - it kept

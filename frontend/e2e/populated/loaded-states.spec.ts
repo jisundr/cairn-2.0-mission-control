@@ -53,6 +53,11 @@ test.describe("populated loaded states", () => {
     // e2e-session-other's one call is on an unpriced model - its cost cell
     // carries the info-dot affordance (goal 3) rather than crashing.
     await expect(page.getByTestId("session-row-e2e-session-other").getByTestId("info-dot")).toBeVisible();
+    // Only e2e-session-main has a recorded cairn version (fixtures/seed.py);
+    // it is the newest in range, so nothing is marked older.
+    await expect(page.getByTestId("cairn-version-e2e-session-main")).toHaveText("0.40.0");
+    await expect(page.getByTestId("cairn-version-e2e-session-other")).toHaveText("unknown");
+    await expect(page.getByTestId(/^cairn-older-/)).toHaveCount(0);
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);

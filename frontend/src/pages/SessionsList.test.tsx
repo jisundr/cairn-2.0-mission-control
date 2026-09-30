@@ -62,6 +62,57 @@ describe("SessionsList", () => {
     expect(onSelectSession).toHaveBeenCalledWith(SESSION.session_id);
   });
 
+  it("shows each session's cairn version, marking only those below the newest in the range as older", async () => {
+    install({
+      "/api/rollup/session": envelope([
+        { ...SESSION, session_id: "sess-newest", cairn_version: "0.40.0" },
+        { ...SESSION, session_id: "sess-older", cairn_version: "0.9.3" },
+        { ...SESSION, session_id: "sess-unknown", cairn_version: null },
+        { ...SESSION, session_id: "sess-absent" },
+      ]),
+    });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getByTestId("cairn-version-sess-newest")).toHaveTextContent("0.40.0"));
+    expect(screen.getByTestId("cairn-version-sess-older")).toHaveTextContent("0.9.3");
+    expect(screen.getByTestId("cairn-older-sess-older")).toHaveAttribute("title", "Older than 0.40.0, newest in this range");
+    expect(screen.queryByTestId("cairn-older-sess-newest")).toBeNull();
+    expect(screen.getByTestId("cairn-version-sess-unknown")).toHaveTextContent("unknown");
+    expect(screen.queryByTestId("cairn-older-sess-unknown")).toBeNull();
+    expect(screen.getByTestId("cairn-version-sess-absent")).toHaveTextContent("unknown");
+    expect(screen.queryByTestId("cairn-older-sess-absent")).toBeNull();
+  });
+
+  it("measures older against the newest version across the whole range, not just the current page", async () => {
+    const sessions: SessionSummary[] = Array.from({ length: 30 }, (_, i) => ({
+      ...SESSION,
+      session_id: `session-${i}`,
+      started: new Date(Date.UTC(2026, 8, 25 - i)).toISOString(),
+      ended: new Date(Date.UTC(2026, 8, 25 - i, 0, 30)).toISOString(),
+      cairn_version: i === 29 ? "0.41.0" : "0.40.0",
+    }));
+    install({ "/api/rollup/session": envelope(sessions) });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getAllByTestId(/^session-row-/)).toHaveLength(25));
+    expect(screen.getByTestId("cairn-older-session-0")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/^cairn-older-/)).toHaveLength(25);
+    expect(screen.getByTestId("pagination-count")).toHaveTextContent("Showing 1–25 of 30");
+  });
+
+  it("marks nothing older when every session shares one version", async () => {
+    install({
+      "/api/rollup/session": envelope([
+        { ...SESSION, cairn_version: "0.40.0" },
+        { ...OLDER_SESSION, cairn_version: "0.40.0" },
+      ]),
+    });
+    renderWithClient(<SessionsList activeTab="sessions" onTabChange={noop} onSelectSession={noop} />);
+
+    await waitFor(() => expect(screen.getAllByTestId(/^session-row-/)).toHaveLength(2));
+    expect(screen.queryAllByTestId(/^cairn-older-/)).toHaveLength(0);
+  });
+
   // S2: pagination.
   it("S2: paginates at 25 rows, Prev disabled on page 1, Next advances the page", async () => {
     const sessions: SessionSummary[] = Array.from({ length: 30 }, (_, i) => ({
