@@ -5,6 +5,7 @@ Usage:
     from parser import parse_session
     title = parse_session(cairn_dir, transcript_path, session_id)
 """
+import contextlib
 import json
 import re
 import sqlite3
@@ -222,7 +223,10 @@ def parse_session(cairn_dir: Path, transcript_path: Path, session_id: str) -> st
             _record_cairn_version(conn, Path(cairn_dir), session_id)
             conn.commit()
         except sqlite3.Error:
-            conn.rollback()
+            # A rollback that fails too (e.g. disk I/O) is dropped: the
+            # token rows are already committed, and close() below still runs.
+            with contextlib.suppress(sqlite3.Error):
+                conn.rollback()
         return title
     finally:
         conn.close()

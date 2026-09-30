@@ -507,3 +507,55 @@ def test_parse_session_keeps_token_rows_when_the_version_step_fails(tmp_path, mo
         assert conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 1
     finally:
         conn.close()
+
+
+def test_a_later_parse_stores_the_version_after_an_earlier_version_step_failed(tmp_path, monkeypatch):
+    def fail(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(db, "save_session_version", fail)
+    cairn_dir = _parse_with_log(tmp_path, ["2026-09-30T00:00:00Z\t0.40.0\tsess-1"])
+    assert _stored_version(cairn_dir, "sess-1") is None
+
+    monkeypatch.undo()
+    parser.parse_session(cairn_dir, tmp_path / "session.jsonl", "sess-1")
+
+    assert _stored_version(cairn_dir, "sess-1") == "0.40.0"
+    conn = db.connect(cairn_dir)
+    try:
+        # The second pass re-reads the same transcript; its call is not duplicated.
+        assert conn.execute("SELECT session_id, COUNT(*) FROM calls GROUP BY session_id").fetchall() == [("sess-1", 1)]
+    finally:
+        conn.close()
+
+
+class _RollbackFails:
+    """Wraps a real connection so only rollback() raises, as on a disk I/O error."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def rollback(self):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def test_parse_session_survives_a_failing_rollback_after_the_version_step_fails(tmp_path, monkeypatch):
+    def fail(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    real_connect = db.connect
+    monkeypatch.setattr(db, "save_session_version", fail)
+    monkeypatch.setattr(db, "connect", lambda cairn_dir: _RollbackFails(real_connect(cairn_dir)))
+
+    cairn_dir = _parse_with_log(tmp_path, ["2026-09-30T00:00:00Z\t0.40.0\tsess-1"])
+
+    monkeypatch.undo()
+    assert _stored_version(cairn_dir, "sess-1") is None
+    conn = db.connect(cairn_dir)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 1
+    finally:
+        conn.close()
