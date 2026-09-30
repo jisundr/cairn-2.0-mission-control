@@ -1,6 +1,7 @@
 import http.server
 import json
 import socket
+import sqlite3
 import sys
 import threading
 import time
@@ -63,7 +64,7 @@ def make_tool_use(**overrides):
     return tool_use
 
 
-def make_project(tmp_path, name="proj", calls=(), tool_uses=(), events=(), labels=None):
+def make_project(tmp_path, name="proj", calls=(), tool_uses=(), events=(), labels=None, versions=None):
     root = tmp_path / name
     root.mkdir()
     conn = db.connect(root / ".cairn")
@@ -75,6 +76,8 @@ def make_project(tmp_path, name="proj", calls=(), tool_uses=(), events=(), label
         db.insert_usage_limit_event(conn, **e)
     for session_id, label in (labels or {}).items():
         db.save_session_label(conn, session_id=session_id, label=label)
+    for session_id, version in (versions or {}).items():
+        db.save_session_version(conn, session_id=session_id, version=version)
     conn.commit()
     conn.close()
     return root
@@ -315,6 +318,52 @@ def test_session_trace_label_is_empty_when_no_saved_label():
     calls = [make_call(request_id="r1", session_id="sess-1")]
     trace = server.build_session_trace("sess-1", calls)
     assert trace["label"] == ""
+
+
+def _api_data(app, path, query=None):
+    status, body = app.handle_api(path, query or {})
+    assert status == 200
+    return body["data"]
+
+
+def test_session_list_and_trace_carry_the_stored_cairn_version(tmp_path):
+    root = make_project(
+        tmp_path, "proj",
+        calls=[
+            make_call(request_id="r1", session_id="sess-new"),
+            make_call(request_id="r2", session_id="sess-old", timestamp="2026-08-27T12:00:00Z"),
+        ],
+        versions={"sess-new": "0.40.0"},
+    )
+    app = server.TokenMeteringApp(root)
+
+    rows = _api_data(app, "/api/rollup/session", {"range": ["life"]})
+    by_id = {r["session_id"]: r["cairn_version"] for r in rows}
+    assert by_id == {"sess-new": "0.40.0", "sess-old": None}
+
+    assert _api_data(app, "/api/session/sess-new/trace")["cairn_version"] == "0.40.0"
+    assert _api_data(app, "/api/session/sess-old/trace")["cairn_version"] is None
+
+
+def test_cairn_version_is_null_for_a_db_without_the_session_versions_table(tmp_path):
+    root = tmp_path / "legacy"
+    cairn_dir = root / ".cairn"
+    cairn_dir.mkdir(parents=True)
+    legacy = sqlite3.connect(db.db_path(cairn_dir))
+    legacy.execute(db.CALLS_SCHEMA)
+    legacy.execute(db.USAGE_LIMIT_EVENTS_SCHEMA)
+    legacy.execute(db.SESSION_LABELS_SCHEMA)
+    db.insert_call(legacy, make_call(request_id="r1", session_id="sess-1"))
+    legacy.commit()
+    legacy.close()
+    app = server.TokenMeteringApp(root)
+
+    rows = _api_data(app, "/api/rollup/session", {"range": ["life"]})
+    assert [(r["session_id"], r["cairn_version"]) for r in rows] == [("sess-1", None)]
+    assert _api_data(app, "/api/session/sess-1/trace")["cairn_version"] is None
+    tables = {r[0] for r in sqlite3.connect(db.db_path(cairn_dir)).execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "session_versions" not in tables
 
 
 def test_fetch_session_calls_matches_unbounded_fetch_then_python_filter(tmp_path):

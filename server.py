@@ -394,15 +394,23 @@ def rollup_timeseries(rows: list[dict], since: str, until: str, bucket: str) -> 
     return points
 
 
-def rollup_sessions(calls: list[dict], events: list[dict], labels: dict[str, str] | None = None) -> list[dict]:
+def rollup_sessions(
+    calls: list[dict],
+    events: list[dict],
+    labels: dict[str, str] | None = None,
+    versions: dict[str, str] | None = None,
+) -> list[dict]:
     """One row per (project, session_id), most recently started first.
     `usage_limit_hit` cross-references `usage_limit_events` distinctly -
     it is never folded into the token/cost totals here. `labels` (keyed by
     session_id, from `db.py`'s `session_labels` table) is optional and may
     omit a session entirely - such a session's `label` just comes through
-    empty rather than erroring.
+    empty rather than erroring. `versions` (keyed by session_id, from
+    `session_versions`) is optional the same way; a session without one
+    gets `cairn_version: None`.
     """
     labels = labels or {}
+    versions = versions or {}
     limited = {(e["project"], e["session_id"]) for e in events}
     sessions = defaultdict(list)
     for row in calls:
@@ -423,13 +431,16 @@ def rollup_sessions(calls: list[dict], events: list[dict], labels: dict[str, str
                 "cost": pricing.group_cost(group_rows),
                 "usage_limit_hit": (project_label, session_id) in limited,
                 "label": labels.get(session_id, ""),
+                "cairn_version": versions.get(session_id),
             }
         )
     result.sort(key=lambda s: s["started"], reverse=True)
     return result
 
 
-def build_session_trace(session_id: str, calls: list[dict], label: str | None = None) -> dict | None:
+def build_session_trace(
+    session_id: str, calls: list[dict], label: str | None = None, cairn_version: str | None = None
+) -> dict | None:
     """Agent groups (ordered by each agent's first call), each with its
     calls in chronological order. A call's `duration_seconds` is the gap
     to the next call by the *same agent* in this session (there being no
@@ -437,6 +448,8 @@ def build_session_trace(session_id: str, calls: list[dict], label: str | None = 
     no next call, so it's None. Returns None if the session has no calls.
     `label` (from `db.py`'s `session_labels` table) is optional and comes
     through empty when the session has no saved label yet.
+    `cairn_version` (from `session_versions`) comes through as None when
+    the session has none recorded.
     """
     if not calls:
         return None
@@ -487,6 +500,7 @@ def build_session_trace(session_id: str, calls: list[dict], label: str | None = 
         "ended": calls[-1]["timestamp"],
         "agents": agents_out,
         "label": label or "",
+        "cairn_version": cairn_version,
     }
 
 
@@ -879,6 +893,23 @@ class TokenMeteringApp:
                 conn.close()
         return labels
 
+    def _fetch_session_versions(self, projects: list[Project]) -> dict[str, str]:
+        """Every recorded cairn version across `projects`, keyed by
+        session_id. A db that predates `session_versions` contributes
+        nothing, per `_open_readonly`'s cold-start handling.
+        """
+        versions: dict[str, str] = {}
+        for project in projects:
+            conn = _open_readonly(project.db_path, "session_versions")
+            if conn is None:
+                continue
+            try:
+                for row in conn.execute("SELECT session_id, cairn_version FROM session_versions"):
+                    versions[row["session_id"]] = row["cairn_version"]
+            finally:
+                conn.close()
+        return versions
+
     def _ranged_calls(self, range_key: str, project_filter: str | None) -> list[dict]:
         projects = _filter_projects(self.projects(), project_filter)
         since, until = range_bounds(range_key)
@@ -1038,13 +1069,15 @@ class TokenMeteringApp:
         calls = self._fetch_calls(projects, since=since, until=until)
         events = self._fetch_usage_limit_events(projects, since=since, until=until)
         labels = self._fetch_session_labels(projects)
-        return rollup_sessions(calls, events, labels)
+        versions = self._fetch_session_versions(projects)
+        return rollup_sessions(calls, events, labels, versions)
 
     def session_trace(self, session_id: str, project_filter: str | None = None) -> dict | None:
         projects = _filter_projects(self.projects(), project_filter)
         calls = self._fetch_session_calls(projects, session_id)
         labels = self._fetch_session_labels(projects)
-        return build_session_trace(session_id, calls, labels.get(session_id))
+        versions = self._fetch_session_versions(projects)
+        return build_session_trace(session_id, calls, labels.get(session_id), versions.get(session_id))
 
     def call_detail(self, session_id: str, n: int, project_filter: str | None = None) -> dict | None:
         projects = _filter_projects(self.projects(), project_filter)
