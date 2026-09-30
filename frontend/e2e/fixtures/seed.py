@@ -29,6 +29,7 @@ import server  # noqa: E402
 SESSION_MAIN = "e2e-session-main"
 SESSION_OTHER = "e2e-session-other"
 SESSION_MAIN_LABEL = "Add a login page to the app"
+SESSION_MAIN_CAIRN_VERSION = "0.40.0"
 AVAILABLE_REQUEST_ID = "req-available-1"
 
 # 2x2 images encoded by Pillow (libwebp for the WebP, lossless), so a real
@@ -133,6 +134,9 @@ def seed_db(project_root: Path, now: datetime) -> None:
         raw_entry=json.dumps({"isApiErrorMessage": True}),
     )
     db.save_session_label(conn, session_id=SESSION_MAIN, label=SESSION_MAIN_LABEL)
+    # Only the main session gets a cairn version; e2e-session-other stands
+    # in for a session that predates version capture ("cairn unknown").
+    db.save_session_version(conn, session_id=SESSION_MAIN, version=SESSION_MAIN_CAIRN_VERSION)
     conn.commit()
     conn.close()
 

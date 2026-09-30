@@ -75,6 +75,18 @@ test.describe("populated loaded states", () => {
     // The one call with a seeded transcript entry (AVAILABLE_REQUEST_ID)
     // renders its Read tool-action line and text response.
     await expect(page.getByTestId("chat-thread")).toContainText("Read — src/login.py");
+    await expect(page.getByTestId("drill-cairn-version")).toHaveText("cairn 0.40.0");
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test("Drilldown of a session with no recorded version reads cairn unknown, no console errors", async ({ page }) => {
+    const { consoleErrors, pageErrors } = trackErrors(page);
+
+    await page.goto("/sessions/e2e-session-other");
+
+    await expect(page.getByTestId("drill-cairn-version")).toHaveText("cairn unknown");
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);

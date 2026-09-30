@@ -7,7 +7,7 @@ import { InfoDot, isUnknownCost } from "../components/InfoDot";
 import { Panel, PanelTitle } from "../components/Panel";
 import { PanelError } from "../components/PanelError";
 import { StackedBarPanel, type StackedBarRow } from "../components/StackedBarPanel";
-import { formatCost, formatDateLabel, formatSessionDuration, formatTokens, shortId } from "../lib/format";
+import { formatCairnVersion, formatCost, formatDateLabel, formatSessionDuration, formatTokens, shortId } from "../lib/format";
 
 interface DrilldownProps {
   sessionId: string;
@@ -221,7 +221,8 @@ export function Drilldown({ sessionId, activeTab, onTabChange, onBack }: Drilldo
           </a>
           <div className="drill-title">Session {trace.label || shortId(trace.session_id)}</div>
           <div className="drill-meta">
-            {formatDateLabel(trace.started.slice(0, 10))} · {formatSessionDuration(trace.started, trace.ended)} runtime
+            {formatDateLabel(trace.started.slice(0, 10))} · {formatSessionDuration(trace.started, trace.ended)} runtime ·{" "}
+            <span data-testid="drill-cairn-version">{formatCairnVersion(trace.cairn_version)}</span>
           </div>
         </div>
         <div className="drill-right">

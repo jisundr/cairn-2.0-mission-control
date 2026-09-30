@@ -83,6 +83,9 @@ export interface SessionSummary {
   cost: number | null;
   usage_limit_hit: boolean;
   label?: string;
+  // The cairn version the session started under (server.py's
+  // session_versions table); null when none was recorded.
+  cairn_version?: string | null;
 }
 
 export interface UsageLimitEvent {
@@ -122,6 +125,7 @@ export interface SessionTrace {
   ended: string;
   agents: AgentTrace[];
   label?: string;
+  cairn_version?: string | null;
 }
 
 export interface CallDetail {

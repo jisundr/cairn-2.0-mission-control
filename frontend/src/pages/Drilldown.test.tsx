@@ -81,6 +81,44 @@ describe("Drilldown", () => {
     expect(screen.getByText(/grep -n "backfill" parser.py/)).toBeInTheDocument();
   });
 
+  it("shows the cairn version the session started under", async () => {
+    installFetchMock({
+      ...projectsHandlers(),
+      [`/api/session/${SESSION_ID}/trace`]: () => envelope({ ...TRACE, cairn_version: "0.40.0" }),
+      [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
+    });
+
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
+
+    expect(await screen.findByTestId("drill-cairn-version")).toHaveTextContent("cairn 0.40.0");
+  });
+
+  it("shows cairn unknown when the session has no recorded version", async () => {
+    installFetchMock({
+      ...projectsHandlers(),
+      [`/api/session/${SESSION_ID}/trace`]: () => envelope({ ...TRACE, cairn_version: null }),
+      [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
+    });
+
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
+
+    expect(await screen.findByTestId("drill-cairn-version")).toHaveTextContent("cairn unknown");
+  });
+
+  it("renders a version string as text, never as markup", async () => {
+    installFetchMock({
+      ...projectsHandlers(),
+      [`/api/session/${SESSION_ID}/trace`]: () => envelope({ ...TRACE, cairn_version: "<b>0.40.0</b>" }),
+      [`/api/call/${SESSION_ID}/1`]: () => envelope(callDetail(1)),
+    });
+
+    renderWithClient(<Drilldown sessionId={SESSION_ID} activeTab="sessions" onTabChange={noopTabChange} onBack={() => {}} />);
+
+    const el = await screen.findByTestId("drill-cairn-version");
+    expect(el).toHaveTextContent("cairn <b>0.40.0</b>");
+    expect(el.querySelector("b")).toBeNull();
+  });
+
   it("shows an unpriced agent cost with an info-dot", async () => {
     installFetchMock({
       ...projectsHandlers(),

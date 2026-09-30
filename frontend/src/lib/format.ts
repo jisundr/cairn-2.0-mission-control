@@ -119,3 +119,26 @@ export function formatRelativeToNow(iso: string, now: Date = new Date()): string
   const diffHr = Math.floor(diffMin / 60);
   return `${diffHr}h ago`;
 }
+
+// The cairn version a session started under, for display. A session with
+// none recorded (it predates version capture, or its log line was unreadable)
+// reads "cairn unknown".
+export function formatCairnVersion(version: string | null | undefined): string {
+  return `cairn ${version || "unknown"}`;
+}
+
+const VERSION_CORE_RE = /^(\d+)\.(\d+)\.(\d+)/;
+
+// Orders two cairn versions by numeric major.minor.patch (negative when `a`
+// is older). Any -/+ suffix is ignored, and input that doesn't start with a
+// major.minor.patch triple compares equal to anything, so it never ranks.
+export function compareVersions(a: string, b: string): number {
+  const ma = VERSION_CORE_RE.exec(a);
+  const mb = VERSION_CORE_RE.exec(b);
+  if (!ma || !mb) return 0;
+  for (let i = 1; i <= 3; i++) {
+    const diff = Number(ma[i]) - Number(mb[i]);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}

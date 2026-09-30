@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatActivityStamp, formatDateLabel, formatLastTouched, taskDisplayName } from "./format";
+import {
+  compareVersions,
+  formatActivityStamp,
+  formatCairnVersion,
+  formatDateLabel,
+  formatLastTouched,
+  taskDisplayName,
+} from "./format";
 
 describe("formatDateLabel", () => {
   it("omits the year when the date falls in the given now's year", () => {
@@ -70,5 +77,34 @@ describe("formatActivityStamp", () => {
 
   it("falls back to the date label for a time beyond the future skew allowance", () => {
     expect(formatActivityStamp("2026-09-29", "10:15", now)).toBe(formatDateLabel("2026-09-29", now));
+  });
+});
+
+describe("formatCairnVersion", () => {
+  it("prefixes a recorded version with cairn", () => {
+    expect(formatCairnVersion("0.40.0")).toBe("cairn 0.40.0");
+  });
+
+  it("reads unknown when no version was recorded", () => {
+    expect(formatCairnVersion(null)).toBe("cairn unknown");
+    expect(formatCairnVersion(undefined)).toBe("cairn unknown");
+  });
+});
+
+describe("compareVersions", () => {
+  it("orders by numeric major, minor, then patch rather than as text", () => {
+    expect(compareVersions("0.9.0", "0.10.0")).toBeLessThan(0);
+    expect(compareVersions("1.0.0", "0.99.99")).toBeGreaterThan(0);
+    expect(compareVersions("0.40.2", "0.40.10")).toBeLessThan(0);
+  });
+
+  it("treats equal cores as equal whatever the suffix", () => {
+    expect(compareVersions("0.40.0", "0.40.0")).toBe(0);
+    expect(compareVersions("0.40.0-rc.1", "0.40.0")).toBe(0);
+  });
+
+  it("treats input it cannot parse as equal to anything", () => {
+    expect(compareVersions("unknown", "0.40.0")).toBe(0);
+    expect(compareVersions("0.40.0", "1.2")).toBe(0);
   });
 });
