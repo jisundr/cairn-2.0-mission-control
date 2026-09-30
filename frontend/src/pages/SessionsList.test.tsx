@@ -76,8 +76,9 @@ describe("SessionsList", () => {
     await waitFor(() => expect(screen.getByTestId("cairn-version-sess-newest")).toHaveTextContent("0.40.0"));
     expect(screen.getByTestId("cairn-version-sess-older")).toHaveTextContent("0.9.3");
     expect(screen.getByTestId("cairn-older-sess-older")).toHaveAttribute("title", "Older than 0.40.0, newest in this range");
-    // A text space, not just CSS margin, so assistive tech reads "0.9.3 older".
-    expect(screen.getByTestId("cairn-version-sess-older").textContent).toBe("0.9.3 older");
+    // A no-break space, not just CSS margin: assistive tech reads "0.9.3 older",
+    // and the badge cannot wrap away from its version in a narrow cell.
+    expect(screen.getByTestId("cairn-version-sess-older").textContent).toBe("0.9.3\u00a0older");
     expect(screen.getByTestId("cairn-version-sess-newest").textContent).toBe("0.40.0");
     expect(screen.queryByTestId("cairn-older-sess-newest")).toBeNull();
     expect(screen.getByTestId("cairn-version-sess-unknown")).toHaveTextContent("unknown");

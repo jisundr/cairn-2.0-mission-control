@@ -296,7 +296,7 @@ export function SessionsList({ activeTab, onTabChange, onSelectSession }: Sessio
                       {s.cairn_version || "unknown"}
                       {s.cairn_version && newest && compareVersions(s.cairn_version, newest) < 0 && (
                         <>
-                          {" "}
+                          {" "}
                           <span
                             className="kcard-kind cairn-older"
                             data-testid={`cairn-older-${s.session_id}`}
