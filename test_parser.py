@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -476,3 +477,33 @@ def test_parse_session_picks_up_a_version_logged_after_an_earlier_parse(tmp_path
     parser.parse_session(cairn_dir, tmp_path / "session.jsonl", "sess-1")
 
     assert _stored_version(cairn_dir, "sess-1") == "0.40.0"
+
+
+def test_parse_session_ignores_a_version_written_in_non_ascii_digits(tmp_path):
+    cairn_dir = tmp_path / ".cairn"
+    cairn_dir.mkdir(parents=True)
+    (cairn_dir / "sessions.log").write_text(
+        "2026-09-30T00:00:00Z\t٠.٤٠.٠\tsess-1\n", encoding="utf-8"
+    )
+    transcript_path = tmp_path / "session.jsonl"
+    write_jsonl(transcript_path, [make_call_entry("req-1")])
+
+    parser.parse_session(cairn_dir, transcript_path, "sess-1")
+
+    assert _stored_version(cairn_dir, "sess-1") is None
+
+
+def test_parse_session_keeps_token_rows_when_the_version_step_fails(tmp_path, monkeypatch):
+    def fail(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(db, "save_session_version", fail)
+
+    cairn_dir = _parse_with_log(tmp_path, ["2026-09-30T00:00:00Z\t0.40.0\tsess-1"])
+
+    assert _stored_version(cairn_dir, "sess-1") is None
+    conn = db.connect(cairn_dir)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM calls").fetchone()[0] == 1
+    finally:
+        conn.close()

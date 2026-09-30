@@ -7,6 +7,7 @@ Usage:
 """
 import json
 import re
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -25,10 +26,11 @@ UNKNOWN_MODEL = "(unknown)"
 # hooks/session-start.sh appends `<utc>\t<version>\t<session_id>` to
 # `.cairn/sessions.log` on every SessionStart. The version field is only
 # trusted if it looks like a release number - `unknown` (plugin.json
-# unreadable) and anything else fail this match and are skipped.
+# unreadable) and anything else fail this match and are skipped. The
+# digits are ASCII-only ([0-9], not \d) to match the frontend's compare.
 SESSIONS_LOG = "sessions.log"
 MAX_VERSION_LEN = 64
-CAIRN_VERSION_RE = re.compile(r"\d{1,4}\.\d{1,4}\.\d{1,4}(?:[-+][0-9A-Za-z.-]{1,32})?")
+CAIRN_VERSION_RE = re.compile(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}(?:[-+][0-9A-Za-z.-]{1,32})?")
 
 
 def _tool_result_text(content):
@@ -212,9 +214,15 @@ def parse_session(cairn_dir: Path, transcript_path: Path, session_id: str) -> st
             # never wiped out by one that didn't.
             db.save_session_label(conn, session_id=session_id, label=title)
 
-        _record_cairn_version(conn, Path(cairn_dir), session_id)
-
         conn.commit()
+
+        # Token rows are committed above, so a database error while
+        # recording the version can only lose the version, never them.
+        try:
+            _record_cairn_version(conn, Path(cairn_dir), session_id)
+            conn.commit()
+        except sqlite3.Error:
+            conn.rollback()
         return title
     finally:
         conn.close()
