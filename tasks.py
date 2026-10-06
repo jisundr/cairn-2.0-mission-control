@@ -427,8 +427,8 @@ def _done_fact(kind: str, key_info: str, folder_name: str, project_root: Path, g
 
 def _column(*, kind: str, key_info: str, has_plan: bool, done: bool, active: bool) -> str:
     """First-match-wins lifecycle stage from a folder's own facts: done ->
-    blocked -> awaiting_approval -> scoping (research kind, or no PLAN.md) ->
-    in_review -> building (active, or a plan not merely approved) -> planned.
+    blocked -> awaiting_approval -> in_review (review kind) -> scoping
+    (research kind, or no PLAN.md) -> in_review -> building (active, or a plan not merely approved) -> planned.
     A folder with sub-tasks has this overridden afterwards by
     `_apply_parent_rollup` (`parent_tasks` until every child is done)."""
     if done:
@@ -437,6 +437,8 @@ def _column(*, kind: str, key_info: str, has_plan: bool, done: bool, active: boo
         return "blocked"
     if _awaiting_approval_fact(key_info):
         return "awaiting_approval"
+    if kind == "review":
+        return "in_review"
     if kind == "research" or not has_plan:
         return "scoping"
     if _in_review_fact(key_info):
@@ -624,15 +626,17 @@ def build_cards(
 
 
 def _list_docs(folder_dir: Path) -> list[dict]:
-    """Every `*.md` file directly under `folder_dir` except `STATE.md`/
-    `DRAFT.md` (already covered by the Details tab), as name/byte-size/
+    """Every `*.md` file directly under `folder_dir` except whichever of
+    `STATE.md`/`DRAFT.md` the Details tab already shows (`DRAFT.md` only
+    when there is no `STATE.md`, as in an older `review` folder), as name/byte-size/
     mtime metadata only - never content (§6.6). Not recursive: a subfolder
     of loose assets (`wireframes/`, `mockups/`) is never a "doc" and isn't
     listed. `docs/tasks/` is gitignored per-project, so filesystem mtime -
     not a git log - is the honest "last touched" signal here."""
     docs: list[dict] = []
+    shown = {"STATE.md"} if (folder_dir / "STATE.md").is_file() else {"DRAFT.md"}
     for path in sorted(folder_dir.glob("*.md")):
-        if path.name in ("STATE.md", "DRAFT.md") or not path.is_file():
+        if path.name in shown or not path.is_file():
             continue
         try:
             stat = path.stat()
