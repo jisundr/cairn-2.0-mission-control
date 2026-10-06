@@ -418,6 +418,12 @@ def _stage(key_info="", *, kind="build", has_plan=True, done=False, active=False
     return tasks._column(kind=kind, key_info=key_info, has_plan=has_plan, done=done, active=active)
 
 
+def test_review_folder_sits_in_review_without_a_plan():
+    assert _stage("round 1 drafted, awaiting Post or Edit", kind="review", has_plan=False) == "in_review"
+    assert _stage("done: approved", kind="review", has_plan=False, done=True) == "done"
+    assert _stage("blocked on author", kind="review", has_plan=False) == "blocked"
+
+
 def test_column_precedence_across_the_seven_stages():
     assert _stage(done=True, key_info="awaiting plan approval", has_plan=False) == "done"
     assert _stage("awaiting plan approval", has_plan=False) == "awaiting_approval"
@@ -707,6 +713,21 @@ def test_list_docs_excludes_state_and_draft_and_is_not_recursive(tmp_path):
     assert names == {"REQUIREMENTS.md", "PRD.md"}
     assert all(isinstance(d["size"], int) and d["size"] > 0 for d in docs)
     assert all(d["modified"] for d in docs)
+
+
+def test_list_docs_shows_draft_when_state_md_is_the_details_source(tmp_path):
+    folder = tmp_path / "2026-10-07-0700-review-org-repo-pr-9"
+    write_state(folder, key_info="round 1 posted, awaiting author")
+    (folder / "DRAFT.md").write_text("# PR #9 — Fix the thing\n")
+    assert {d["name"] for d in tasks._list_docs(folder)} == {"DRAFT.md"}
+
+
+def test_list_docs_hides_draft_when_it_is_the_details_source(tmp_path):
+    folder = tmp_path / "2026-10-07-0700-review-org-repo-pr-9"
+    folder.mkdir()
+    (folder / "DRAFT.md").write_text("# PR #9 — Fix the thing\n")
+    (folder / "notes.md").write_text("notes\n")
+    assert {d["name"] for d in tasks._list_docs(folder)} == {"notes.md"}
 
 
 def test_build_detail_returns_none_for_a_folder_with_no_state_or_draft(tmp_path):
